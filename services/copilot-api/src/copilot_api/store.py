@@ -12,10 +12,26 @@ from azure.cosmos.exceptions import (
     CosmosResourceExistsError,
     CosmosResourceNotFoundError,
 )
-from bank_contracts.models import AccessRequest, AccessRequestStatus
+from bank_contracts.models import (
+    AccessRequest,
+    AccessRequestStatus,
+    ChatAnswer,
+    Citation,
+    Claim,
+    CustomerFields,
+    CustomerProfile,
+    EscalationDecision,
+    EscalationDraft,
+    Product,
+)
 from pydantic import BaseModel
 
-from copilot_api.workflow.turn import HistoryEntry
+from copilot_api.workflow.composer import ComposerOutput, DraftClaim
+from copilot_api.workflow.customer import CustomerPlan
+from copilot_api.workflow.escalation import EscalationCase
+from copilot_api.workflow.rag import Chunk
+from copilot_api.workflow.router import RouteDecision
+from copilot_api.workflow.turn import HistoryEntry, Turn
 
 
 class PendingCheckpoint(BaseModel):
@@ -89,6 +105,39 @@ class InMemoryStore:
         return self._checkpoints.setdefault(session_id, InMemoryCheckpointStorage())
 
 
+CHECKPOINT_TYPES: frozenset[str] = frozenset(
+    f"{cls.__module__}:{cls.__qualname__}"
+    for cls in (
+        AccessRequest,
+        ChatAnswer,
+        Citation,
+        Claim,
+        CustomerFields,
+        CustomerProfile,
+        EscalationDecision,
+        EscalationDraft,
+        Product,
+        ComposerOutput,
+        DraftClaim,
+        CustomerPlan,
+        EscalationCase,
+        Chunk,
+        RouteDecision,
+        HistoryEntry,
+        Turn,
+    )
+)
+
+
+def dump_checkpoint(checkpoint: WorkflowCheckpoint) -> dict:
+    return encode_checkpoint_value(checkpoint.to_dict())
+
+
+def load_checkpoint(value: dict) -> WorkflowCheckpoint:
+    """Decode with the restricted unpickler: only the types copilot checkpoints carry can be rebuilt."""
+    return WorkflowCheckpoint.from_dict(decode_checkpoint_value(value, allowed_types=CHECKPOINT_TYPES))
+
+
 class CosmosCheckpointStorage:
     """Workflow checkpoints of one session, partitioned by session_id in the `checkpoints` container."""
 
@@ -102,7 +151,7 @@ class CosmosCheckpointStorage:
             "session_id": self._session_id,
             "workflow_name": checkpoint.workflow_name,
             "timestamp": checkpoint.timestamp,
-            "checkpoint": encode_checkpoint_value(checkpoint.to_dict()),
+            "checkpoint": dump_checkpoint(checkpoint),
         })
         return checkpoint.checkpoint_id
 
@@ -111,7 +160,7 @@ class CosmosCheckpointStorage:
             item = await self._container.read_item(checkpoint_id, partition_key=self._session_id)
         except CosmosResourceNotFoundError as error:
             raise WorkflowCheckpointException(f"checkpoint {checkpoint_id} not found") from error
-        return WorkflowCheckpoint.from_dict(decode_checkpoint_value(item["checkpoint"]))
+        return load_checkpoint(item["checkpoint"])
 
     async def list_checkpoints(self, *, workflow_name: str) -> list[WorkflowCheckpoint]:
         items = self._container.query_items(
@@ -119,7 +168,7 @@ class CosmosCheckpointStorage:
             parameters=[{"name": "@name", "value": workflow_name}],
             partition_key=self._session_id,
         )
-        return [WorkflowCheckpoint.from_dict(decode_checkpoint_value(item["checkpoint"])) async for item in items]
+        return [load_checkpoint(item["checkpoint"]) async for item in items]
 
     async def delete(self, checkpoint_id: str) -> bool:
         try:

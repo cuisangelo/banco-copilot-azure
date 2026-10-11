@@ -2,7 +2,7 @@ import logging
 from collections.abc import AsyncIterator, Callable
 from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Literal
 
 import httpx
@@ -20,6 +20,7 @@ from bank_contracts.models import (
     ChatRequest,
     EscalationDecision,
     EscalationDraft,
+    GRANT_MINUTES,
     ErrorEvent,
 )
 from bank_contracts.settings import require_env
@@ -101,6 +102,14 @@ def _sse(name: str, model: BaseModel) -> str:
 
 def _error_code(error: Exception) -> Literal["upstream", "internal"]:
     return "upstream" if isinstance(error, openai.APIError | httpx.HTTPError) else "internal"
+
+
+def _as_of(request: AccessRequest, now: datetime) -> AccessRequest:
+    """An approval outlives its grant only on paper: past the grant window it reads as expired."""
+    lapsed = request.decided_at is not None and request.decided_at + timedelta(minutes=GRANT_MINUTES) < now
+    if request.status in ("approved", "partially_approved") and lapsed:
+        return request.model_copy(update={"status": "expired"})
+    return request
 
 
 def create_app(deps: Deps) -> FastAPI:
@@ -279,7 +288,9 @@ def create_app(deps: Deps) -> FastAPI:
 
     @app.get("/access-requests", dependencies=[Depends(supervisor)])
     async def list_access_requests(status: AccessRequestStatus | None = None) -> list[AccessRequest]:
-        return await deps.store.list_access_requests(status)
+        now = datetime.now(UTC)
+        current = [_as_of(request, now) for request in await deps.store.list_access_requests(None)]
+        return [request for request in current if status in (None, request.status)]
 
     @app.get("/access-requests/{request_id}")
     async def get_access_request(request_id: str, who: Caller = Depends(persona)) -> AccessRequest:
@@ -288,7 +299,7 @@ def create_app(deps: Deps) -> FastAPI:
             raise HTTPException(404, "Solicitud inexistente.")
         if request.requested_by != who.sub and not who.principal.has_role("Supervisor"):
             raise HTTPException(403, "Solo el solicitante o un Supervisor pueden ver esta solicitud.")
-        return request
+        return _as_of(request, datetime.now(UTC))
 
     @app.post("/access-requests/{request_id}/decision")
     async def decide_access_request(
