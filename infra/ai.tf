@@ -76,11 +76,11 @@ resource "azapi_resource" "embedding_deployment" {
 }
 
 resource "azurerm_cognitive_account" "content_safety" {
-  name                  = "${local.name}-safety"
-  location              = azurerm_resource_group.main.location
+  name                  = "${local.name}-safety-${var.content_safety_location}"
+  location              = var.content_safety_location
   resource_group_name   = azurerm_resource_group.main.name
   kind                  = "ContentSafety"
   sku_name              = "S0"
-  custom_subdomain_name = "${local.name}-safety"
+  custom_subdomain_name = "${local.name}-safety-${var.content_safety_location}"
   local_auth_enabled    = false
 }

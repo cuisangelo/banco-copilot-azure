@@ -20,11 +20,12 @@ mock_provider "azurerm" {
 mock_provider "azapi" {}
 
 variables {
-  prefix              = "bctest"
-  daily_token_cap     = 1000
-  budget_alert_emails = ["owner@example.com"]
-  web_custom_domain   = "copilot.example.com"
-  cosmos_location     = "canadacentral"
+  prefix                  = "bctest"
+  daily_token_cap         = 1000
+  budget_alert_emails     = ["owner@example.com"]
+  web_custom_domain       = "copilot.example.com"
+  cosmos_location         = "canadacentral"
+  content_safety_location = "eastus2"
 }
 
 run "every_required_env_var_from_the_contracts_is_set" {

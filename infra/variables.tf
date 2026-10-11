@@ -45,6 +45,11 @@ variable "cosmos_location" {
   description = "Region for Cosmos DB. Kept apart from location because Cosmos refuses new accounts in regions under high demand."
 }
 
+variable "content_safety_location" {
+  type        = string
+  description = "Region for Content Safety. Groundedness detection is missing in some regions that do offer Prompt Shields (Canada East answers 404 'not yet available in this region')."
+}
+
 variable "web_custom_domain" {
   type        = string
   description = "Public hostname of the web app (e.g. azure.example.com). copilot-api only accepts CORS from it."
