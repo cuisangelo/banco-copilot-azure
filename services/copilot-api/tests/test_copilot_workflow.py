@@ -128,6 +128,15 @@ async def test_customer_route_also_searches_the_bank_rules():
     assert retriever.queries == ["consulta"]
 
 
+async def test_product_route_also_searches_the_product_sheets():
+    retriever = FakeRetriever([])
+    services = make_services(llm=scripted(route("product"), ProductPlan(calls=[])), retriever=retriever)
+
+    await run_turn(services, "¿Diferencia entre Oro y Platinum?")
+
+    assert retriever.queries == ["consulta"]
+
+
 async def test_denied_fields_require_access_for_exactly_those_fields():
     bank, store = FakeBank(), InMemoryStore()
     bank.actor = "ana"
@@ -240,6 +249,16 @@ async def test_circular_and_mortgage_sheet_disagreeing_is_a_contradiction():
         "circular-2026-07 §Requisitos",
     }
     assert [event.request_id for event in events if event.type == "request_info"] == [answer.escalation.id]
+
+
+async def test_same_attribute_on_different_products_is_not_a_contradiction():
+    output = composed(
+        DraftClaim(text="Oro: mayor de 21", citation_ids=["S1"], subject="TC-ORO", attribute="edad mínima", value="21 años"),
+        DraftClaim(text="Platinum: mayor de 25", citation_ids=["S2"], subject="TC-PLATINUM", attribute="edad mínima", value="25 años"),
+    )
+    services = make_services(llm=scripted(route("procedure"), output), retriever=FakeRetriever([FICHA, CIRCULAR]))
+
+    assert answer_of(await run_turn(services, "¿diferencia entre Oro y Platinum?")).status == "ok"
 
 
 TENURE = "antigüedad laboral mínima"

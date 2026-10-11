@@ -15,6 +15,7 @@ NO_SOURCES_MESSAGE = "No tengo fuentes vigentes para responder esta consulta. Pu
 class DraftClaim(BaseModel):
     text: str
     citation_ids: list[str]
+    subject: str | None = None
     attribute: str | None = None
     value: str | None = None
     customer_meets: bool | None = None

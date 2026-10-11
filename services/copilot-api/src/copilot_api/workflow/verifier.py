@@ -33,12 +33,13 @@ def find_contradiction(claims: list[DraftClaim]) -> str | None:
     Without a customer verdict every conflict matters; with one, sources that disagree on the value but
     agree on whether this customer meets it lead to the same answer, which then cites both.
     """
-    values: dict[str, set[str]] = {}
-    verdicts: dict[str, set[bool | None]] = {}
-    names: dict[str, str] = {}
+    values: dict[tuple[str, str], set[str]] = {}
+    verdicts: dict[tuple[str, str], set[bool | None]] = {}
+    names: dict[tuple[str, str], str] = {}
     for claim in claims:
         if claim.attribute and claim.value:
-            key = _normalize(claim.attribute)
+            # The same attribute on two products (minimum age of Oro vs Platinum) is not a conflict.
+            key = (_normalize(claim.subject or ""), _normalize(claim.attribute))
             names.setdefault(key, claim.attribute.strip())
             values.setdefault(key, set()).add(_normalize(claim.value))
             verdicts.setdefault(key, set()).add(claim.customer_meets)

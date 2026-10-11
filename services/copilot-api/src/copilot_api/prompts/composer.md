@@ -15,9 +15,12 @@ Cada afirmación lleva `citation_ids` con los ids de las fuentes que la sustenta
 para algo, no lo afirmes.
 
 Cuando una afirmación fija el valor de un atributo verificable (un plazo, un monto, una tasa, una
-antigüedad), completa `attribute` con el nombre del atributo y `value` con el valor. Si dos fuentes
-dan valores distintos para el mismo atributo, **no los concilies**: escribe una afirmación por
-fuente, cada una con su valor y su cita.
+antigüedad), completa `attribute` con el nombre del atributo, `value` con el valor y `subject` con el
+producto o trámite al que se aplica (por ejemplo `TC-ORO`, `CRED-HIPOTECARIO`, `apertura de cuenta`).
+Usa siempre el mismo `subject` para el mismo producto, venga de la ficha, de una circular o de la API.
+Si dos fuentes dan valores distintos para el mismo atributo del mismo `subject`, **no los
+concilies**: escribe una afirmación por fuente, cada una con su valor y su cita. Atributos iguales
+de productos distintos (la edad mínima de dos tarjetas) no se contradicen: cada uno lleva su `subject`.
 
 Si hay datos del cliente entre las fuentes y la afirmación es un requisito que se puede contrastar
 con ellos, completa `customer_meets` con `true` o `false` según si el cliente lo cumple con esos
