@@ -69,3 +69,64 @@ Estado al 2026-10-11, después de la evaluación 4.
 | | Latency | ✅ | p50 de 5,5 s y p95 de 28,5 s en la evaluación 4 |
 | | Cost per Invocation | ✅ | `cost_usd` por traza; 40 preguntas por USD 0,05 |
 | | Model / Architecture Optimization | ⚠️ | Modelo mini, escala a cero y niveles gratuitos; no hay comparación medida entre modelos |
+
+## Temario detallado
+
+| Bloque | Tema | Estado | Evidencia / qué falta |
+|---|---|---|---|
+| **Foundry / Azure AI** | Foundry y sus componentes | ✅ | Recurso AIServices, proyecto y conexión a App Insights |
+| | Model deployments y endpoints | ✅ | 2 deployments GlobalStandard por endpoint con Entra (sin llaves) |
+| | Azure OpenAI y selección de modelos | ⚠️ | gpt-4.1-mini elegido sobre gpt-5-mini por latencia y costo; falta la comparación medida |
+| | Prompt management y evaluación | ⚠️ | Prompts versionados en git y evaluados con 40 casos; no se usa la gestión de prompts de Foundry |
+| | Knowledge / RAG con AI Search | ✅ | Híbrida + semántica, umbral de reranker |
+| | Observabilidad, tracing y evaluaciones | ⚠️ | App Insights verificado; evaluaciones en Foundry en curso (`evals-foundry`) |
+| | Content Safety y Responsible AI | ✅ | Prompt Shields y groundedness en vivo |
+| **Agent Framework** | Creación de agentes y herramientas | ⚠️ | Executors + tools MCP; sin agentes de tool calling libre |
+| | Orquestación de agentes | ✅ | Workflow con 9 nodos |
+| | Workflows y grafos | ✅ | `WorkflowBuilder` con aristas condicionales |
+| | Estado, memoria y contexto | ✅ | Checkpoints y sesiones en Cosmos; sin memoria de largo plazo |
+| | Patrones: router / sequential | ✅ | Router + cadena secuencial |
+| | Patrones: concurrent | ⚠️ | En curso: fan-out de productos y cliente (`copilot-quality`) |
+| | Patrones: supervisor | ❌ | No implementado |
+| | Human-in-the-loop | ✅ | Dos HITL verificados en vivo: aprobación de acceso y escalamiento |
+| | Errores, retries y fallbacks | ✅ | Retry con backoff en MCP, 429 de OpenAI, fallas explícitas al usuario |
+| | Frente a LangGraph / Semantic Kernel | ❌ | Falta una sección de criterios en la documentación |
+| **MCP y Tool Calling** | MCP Client / Server | ✅ | `MCPStreamableHTTPTool` ↔ FastMCP propio |
+| | Tools y resources | ⚠️ | 5 tools; ningún MCP *resource* expuesto |
+| | Exposición de APIs como herramientas | ✅ | `mcp-bank` envuelve products-api y customers-api |
+| | MCP Gateway | ❌ | APIM Consumption no aloja MCP; APIM delante de las APIs (decisión de costo) |
+| | Autenticación / autorización | ✅ | JWT reenviado, allowlist de Host, subscription key, X-Backend-Secret |
+| | Agent → MCP → API | ✅ | Verificado en vivo hasta el 403 de nivel 2 |
+| | MCP vs tool calling directo | ⚠️ | Decisión tomada, pero no documentada como criterio |
+| **Arquitecturas agentic** | Single vs multi-agent | ⚠️ | Multi-rol en un grafo; falta el criterio escrito |
+| | Agentes basados en grafos | ✅ | |
+| | Router / Supervisor / Orchestrator | ⚠️ | Router y orquestador sí; supervisor no |
+| | Agent-as-a-Judge / LLM-as-a-Judge | ✅ | Jueces de la evaluación y verificador de groundedness |
+| | Guardrails | ✅ | Seguridad 15/15 |
+| | Planning y reasoning | ⚠️ | Planes estructurados de tool calls; sin modelo de razonamiento |
+| | Memoria corto / largo plazo | ⚠️ | Corto sí, largo no |
+| | RAG agentic | ⚠️ | En curso: agentic retrieval de AI Search (`copilot-quality`) |
+| | Evaluación y trazabilidad E2E | ✅ | Evaluación + trazas por nodo + auditoría |
+| **Stack Azure Cloud** | Container Apps / Functions | ✅ | |
+| | AKS / App Service | ❌ | Solo documentado en "Producción objetivo" |
+| | API Management | ✅ | Consumption con policies |
+| | Entra ID y Managed Identity | ⚠️ / ✅ | MI sí; Entra para usuarios solo en `/documentacion` |
+| | Key Vault | ✅ | |
+| | Azure AI Search | ✅ | |
+| | Storage / Cosmos DB | ✅ | |
+| | Event Grid | ✅ | Blob → Function verificado |
+| | Service Bus | ❌ | No se usa |
+| | App Insights / Monitor / OpenTelemetry | ✅ | |
+| | VNet, Private Endpoint, Private DNS | ❌ | Costo fijo; documentado como producción objetivo |
+| | CI/CD con GitHub Actions | ⚠️ | Workflows escritos; falta el repo remoto |
+| | IaC con Terraform | ✅ | Unos 104 recursos, con tests de invariantes |
+| **Seguridad y gobierno** | RBAC y mínimo privilegio | ✅ | Roles por secreto y por contenedor |
+| | Managed Identities | ✅ | Una por servicio |
+| | Gestión de secretos | ✅ | Key Vault; state fuera del repo |
+| | Private networking | ❌ | |
+| | PII y datos sensibles | ✅ | Niveles 0–3, máscara de PII en spans, historial sin nivel 2, 0 fugas |
+| | Prompt injection y tool poisoning | ✅ | Prompt Shields en documentos (e37 en vivo) y salidas de tools validadas |
+| | Autorización de tools | ✅ | Permisos por campo en customers-api |
+| | Auditoría de acciones de agentes | ✅ | Contenedor `audit` (tests); no revisado en vivo |
+| | Human approval para acciones críticas | ✅ | Escalamiento y acceso a nivel 2 |
+| | Evaluaciones, guardrails y políticas | ✅ | |
