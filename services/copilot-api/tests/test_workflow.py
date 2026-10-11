@@ -222,6 +222,44 @@ async def test_circular_and_mortgage_sheet_disagreeing_is_a_contradiction():
     assert [event.request_id for event in events if event.type == "request_info"] == [answer.escalation.id]
 
 
+TENURE = "antigüedad laboral mínima"
+
+
+async def run_tenure_question(customer_id: str, meets_sheet: bool, meets_circular: bool):
+    bank = FakeBank()
+    bank.actor = "ana"
+    bank.grants[("ana", customer_id)] = {"employment_tenure_months"}
+    output = composed(
+        DraftClaim(text="Ficha: 12 meses", citation_ids=["S1", "S4"], attribute=TENURE, value="12 meses", customer_meets=meets_sheet),
+        DraftClaim(text="Circular: 24 meses", citation_ids=["S2", "S4"], attribute=TENURE, value="24 meses", customer_meets=meets_circular),
+    )
+    plan = CustomerPlan(fields=["employment_tenure_months"], purpose="Verificar antigüedad laboral para el hipotecario")
+    services = make_services(
+        llm=scripted(route("mixed"), plan, output, ProductPlan(calls=[])),
+        retriever=FakeRetriever([FICHA, CIRCULAR]),
+        bank=bank,
+    )
+    return answer_of(await run_turn(services, f"¿{customer_id} cumple la antigüedad para el hipotecario?", actor="ana", customer_id=customer_id))
+
+
+async def test_conflicting_sources_that_split_the_customers_outcome_are_a_contradiction():
+    answer = await run_tenure_question("C-1001", meets_sheet=True, meets_circular=False)
+
+    assert answer.status == "contradiction"
+    assert answer.escalation is not None
+
+
+@pytest.mark.parametrize(("customer_id", "meets"), [("C-1003", True), ("C-1002", False)])
+async def test_conflicting_sources_with_the_same_outcome_answer_ok_citing_both(customer_id, meets):
+    answer = await run_tenure_question(customer_id, meets_sheet=meets, meets_circular=meets)
+
+    assert answer.status == "ok"
+    assert answer.escalation is None
+    cited = {citation.ref for citation in answer.citations if citation.kind == "doc"}
+    assert cited == {"ficha-hipotecario §Requisitos", "circular-2026-07 §Requisitos"}
+    assert [claim.citation_ids[0] for claim in answer.requirements] == ["S1", "S2"]
+
+
 async def test_same_value_from_two_sources_is_not_a_contradiction():
     output = composed(
         DraftClaim(text="12 meses", citation_ids=["S1"], attribute="antigüedad laboral mínima", value="12 meses"),

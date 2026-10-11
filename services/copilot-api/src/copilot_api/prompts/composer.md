@@ -19,4 +19,9 @@ antigüedad), completa `attribute` con el nombre del atributo y `value` con el v
 dan valores distintos para el mismo atributo, **no los concilies**: escribe una afirmación por
 fuente, cada una con su valor y su cita.
 
+Si hay datos del cliente entre las fuentes y la afirmación es un requisito que se puede contrastar
+con ellos, completa `customer_meets` con `true` o `false` según si el cliente lo cumple con esos
+datos (cita también la fuente del dato del cliente). Si no hay datos del cliente para contrastar,
+deja `customer_meets` en `null`.
+
 No decides ni apruebas nada: dices qué se cumple y qué falta según las fuentes.

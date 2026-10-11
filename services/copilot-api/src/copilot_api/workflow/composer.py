@@ -17,6 +17,7 @@ class DraftClaim(BaseModel):
     citation_ids: list[str]
     attribute: str | None = None
     value: str | None = None
+    customer_meets: bool | None = None
 
 
 class ComposerOutput(BaseModel):
