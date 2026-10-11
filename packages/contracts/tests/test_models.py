@@ -56,3 +56,12 @@ def test_feedback_extends_the_create_payload_with_actor_and_time():
         created_at="2026-10-11T23:00:00Z",
     )
     assert feedback.comment is None
+
+
+def test_feedback_rejects_session_ids_cosmos_cannot_store():
+    from bank_contracts.models import FeedbackCreate
+
+    for bad in ("a/b", "a#b", "a?b", "", "x" * 65):
+        with pytest.raises(ValidationError):
+            FeedbackCreate(session_id=bad, turn_index=0, rating="up", answer_status="ok")
+    assert FeedbackCreate(session_id="5f0c1e2a-9b7d-4c3e-8f21-0a1b2c3d4e5f", turn_index=0, rating="up", answer_status="ok")

@@ -130,7 +130,8 @@ class ErrorEvent(BaseModel):
 
 
 class FeedbackCreate(BaseModel):
-    session_id: str
+    # Part of a Cosmos document id, which rejects "/", "#", "?" and "\".
+    session_id: str = Field(pattern=r"^[A-Za-z0-9_-]{1,64}$")
     turn_index: int = Field(ge=0)           # position of the turn in the session, 0-based
     rating: Literal["up", "down"]
     comment: str | None = Field(default=None, max_length=500)
