@@ -206,6 +206,19 @@ async def test_cited_answer_is_ok_with_its_sources():
     assert [(c.id, c.kind, c.ref) for c in answer.citations] == [("S1", "doc", "ficha-hipotecario §Requisitos")]
 
 
+async def test_answer_without_claims_is_insufficient_with_the_composers_message():
+    not_documented = ComposerOutput(
+        message="No encuentro el seguro de mascotas en la documentación vigente.", requirements=[], steps=[]
+    )
+    services = make_services(llm=scripted(route("procedure"), not_documented), retriever=FakeRetriever([FICHA]))
+
+    answer = answer_of(await run_turn(services, "¿requisitos del seguro de mascotas?"))
+
+    assert answer.status == "insufficient"
+    assert answer.message == not_documented.message
+    assert answer.escalation is not None
+
+
 async def test_claim_citing_an_unknown_source_is_insufficient():
     services = make_services(
         llm=scripted(route("procedure"), composed(DraftClaim(text="Se exige aval", citation_ids=["S9"]))),

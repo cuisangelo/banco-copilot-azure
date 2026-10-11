@@ -73,6 +73,15 @@ class Verifier(Executor):
         started = time.perf_counter()
         composed = turn.composed
         claims = composed.requirements + composed.steps
+        if not claims:
+            # Nothing cited means nothing verified: "not in the documentation" is a miss, never an ok.
+            await emit_trace(ctx, "verifier", started, {"claims": 0})
+            answer = ChatAnswer(status="insufficient", message=composed.message + _caveats(turn))
+            await ctx.send_message(
+                EscalationCase(turn, answer, reason="respuesta sin afirmaciones respaldadas"),
+                target_id=ESCALATION_EXECUTOR_ID,
+            )
+            return
         known = {citation.id for citation in turn.citations}
         text = "\n".join([composed.message, *(claim.text for claim in claims)])
         ungrounded_share = await self._services.safety.ungrounded_percentage(
