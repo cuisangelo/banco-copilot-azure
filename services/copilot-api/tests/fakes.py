@@ -61,11 +61,16 @@ PROFILES = {
     "C-1003": CustomerProfile(
         customer_id="C-1003", segment="personas", income_type="dependiente", products=[], customer_tenure_months=60
     ),
+    "C-1004": CustomerProfile(
+        customer_id="C-1004", segment="personas", income_type="dependiente", products=["TC-ORO", "SEGURO-VIDA"],
+        customer_tenure_months=24,
+    ),
 }
 LEVEL2_VALUES = {
     "C-1001": {"monthly_income": 1_850_000, "current_debt": 420_000, "payment_behavior": "al_dia", "employment_tenure_months": 18},
     "C-1002": {"monthly_income": 2_730_000, "current_debt": 0, "payment_behavior": "atraso_30", "employment_tenure_months": 7},
     "C-1003": {"monthly_income": 1_200_000, "current_debt": 90_000, "payment_behavior": "al_dia", "employment_tenure_months": 30},
+    "C-1004": {"monthly_income": 950_000, "current_debt": 0, "payment_behavior": "al_dia", "employment_tenure_months": 24},
 }
 PRODUCTS = {
     "TC-ORO": Product(

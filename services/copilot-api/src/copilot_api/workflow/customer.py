@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 
 from agent_framework import Executor, WorkflowContext, handler, response_handler
 from bank_contracts.models import AccessRequest, ChatAnswer, FieldsDenied, Level2Field
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 from copilot_api.mcp_bank import ToolFailed
 from copilot_api.prompts import load_prompt
@@ -79,6 +79,8 @@ class Customer(Executor):
             await emit_trace(ctx, "customer_agent", started, {"tool_calls": calls}, usage)
             await self._without_customer_data(turn, ctx, CUSTOMER_UNAVAILABLE.format(customer_id=turn.customer_id))
             return
+        if turn.profile.products:
+            await self._name_products(turn, calls)
         denied = await self._read_fields(turn, calls, plan.fields) if plan.fields else None
         data = {"tool_calls": calls, "authz.decision": "denied" if denied else "allowed"}
         if denied:
@@ -88,6 +90,14 @@ class Customer(Executor):
             await self._request_access(turn, plan, denied, ctx)
             return
         await ctx.send_message(turn)
+
+    async def _name_products(self, turn: Turn, calls: list[dict]) -> None:
+        """The profile lists product ids but advisors write names; cite both, taking names only from the API."""
+        try:
+            catalog = await self._tool(turn, calls, "list_products", category=None)
+        except (ToolFailed, ValidationError):
+            return
+        turn.product_names = {product.id: product.name for product in catalog if product.id in turn.profile.products}
 
     async def _read_fields(self, turn: Turn, calls: list[dict], fields: list[Level2Field]) -> FieldsDenied | None:
         try:

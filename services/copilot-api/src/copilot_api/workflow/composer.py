@@ -41,10 +41,14 @@ def build_citations(turn: Turn) -> list[Citation]:
     sources += [("product", f"producto:{product.id}", _product_snippet(product)) for product in turn.products]
     if turn.profile is not None:
         profile = turn.profile
+        products = [
+            f"{turn.product_names[product_id]} ({product_id})" if product_id in turn.product_names else product_id
+            for product_id in profile.products
+        ]
         sources.append((
             "customer",
             f"cliente:{profile.customer_id} perfil",
-            f"segmento {profile.segment}; renta {profile.income_type}; productos: {', '.join(profile.products) or 'ninguno'}; "
+            f"segmento {profile.segment}; renta {profile.income_type}; productos: {', '.join(products) or 'ninguno'}; "
             f"antigüedad como cliente: {profile.customer_tenure_months} meses",
         ))
     if turn.customer_fields is not None:

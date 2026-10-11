@@ -44,6 +44,7 @@ class Turn:
     products: list[Product] = field(default_factory=list)
     customer_plan: CustomerPlan | None = None
     profile: CustomerProfile | None = None
+    product_names: dict[str, str] = field(default_factory=dict)
     customer_fields: CustomerFields | None = None
     unauthorized_fields: list[Level2Field] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)

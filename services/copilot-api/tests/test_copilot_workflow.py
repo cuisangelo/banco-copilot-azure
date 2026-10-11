@@ -185,6 +185,35 @@ async def test_customer_data_needs_a_persona():
     assert bank.calls == []
 
 
+PROFILE_ONLY = CustomerPlan(fields=[], purpose="Revisar qué productos tiene contratados el cliente")
+
+
+async def profile_snippet(customer_id: str, bank: FakeBank) -> str:
+    bank.actor = "ana"
+    services = make_services(
+        llm=scripted(route("customer", customer_id=customer_id), PROFILE_ONLY, composed(DraftClaim(text="Tiene productos", citation_ids=["S1"]))),
+        bank=bank,
+    )
+    answer = answer_of(await run_turn(services, f"¿Qué productos tiene {customer_id}?", actor="ana", customer_id=customer_id))
+    (snippet,) = [c.snippet for c in answer.citations if c.ref == f"cliente:{customer_id} perfil"]
+    return snippet
+
+
+async def test_profile_snippet_names_each_product_from_the_products_api():
+    bank = FakeBank()
+
+    snippet = await profile_snippet("C-1002", bank)
+
+    assert "productos: Tarjeta Oro (TC-ORO);" in snippet
+    assert ("list_products", {"category": None}) in bank.calls
+
+
+async def test_profile_product_the_api_does_not_know_keeps_its_bare_id():
+    snippet = await profile_snippet("C-1004", FakeBank())
+
+    assert "productos: Tarjeta Oro (TC-ORO), SEGURO-VIDA;" in snippet
+
+
 FICHA = chunk("ficha-hipotecario-1", "Antigüedad laboral mínima: 12 meses con el mismo empleador.")
 CIRCULAR = chunk("circular-2026-07-0", "Desde julio, la antigüedad laboral mínima para hipotecario es de 24 meses.")
 
