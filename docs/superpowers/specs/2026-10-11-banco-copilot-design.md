@@ -150,7 +150,7 @@ simulada:
 | Región | Canada East | East US 2 / Sweden Central | AI Search Free creable (no "high demand"), groundedness, evaluadores de seguridad y modelos disponibles |
 | Modelo de chat | gpt-4.1-mini (GlobalStandard) | gpt-5-mini | Sin tokens de razonamiento: menor latencia y costo predecible |
 | Estado | Cosmos DB free tier | Azure Cache for Redis | Redis no tiene nivel gratis; Redis solo en `compose.yaml` local |
-| Frontend | React/Vite en Static Web Apps Free + CORS | SWA Standard con backend enlazado (USD 9) | Enlazar backend exige Standard |
+| Frontend | Next.js (`output: 'export'`) en Static Web Apps Free + CORS; estética corporativa inspirada en Interbank, en azul, sin marcas de Interbank | SWA Standard con backend enlazado (USD 9) / Next.js con SSR | Enlazar backend exige Standard; el export estático no necesita servidor |
 
 Hechos verificados el 2026-10-11 contra la suscripción (no supuestos):
 
@@ -161,7 +161,7 @@ Hechos verificados el 2026-10-11 contra la suscripción (no supuestos):
 ## 2. Arquitectura
 
 ```
-Asesor/Supervisor ─▶ SWA (React) ─HTTPS/SSE + JWT persona─▶ copilot-api (ACA, externo)
+Asesor/Supervisor ─▶ SWA (Next.js) ─HTTPS/SSE + JWT persona─▶ copilot-api (ACA, externo)
                                      │  Agent Framework Workflow
                                      ├─▶ Content Safety (Prompt Shields, groundedness)
                                      ├─▶ Foundry / Azure OpenAI (gpt-4.1-mini, embeddings)
