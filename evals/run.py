@@ -73,7 +73,7 @@ def main() -> int:
         "groundedness": GroundednessEvaluator(model_config, credential=credential),
         "retrieval": RetrievalEvaluator(model_config, credential=credential),
     }
-    client = CopilotClient(args.target)
+    client = CopilotClient(httpx.Client(base_url=args.target, timeout=120))
     rows = [json.loads(line) for line in (EVALS_DIR / "dataset.jsonl").read_text(encoding="utf-8").splitlines()]
 
     results, details = [], []
