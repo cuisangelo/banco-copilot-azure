@@ -72,7 +72,7 @@ class Rag(Executor):
     @handler
     async def run(self, turn: Turn, ctx: WorkflowContext[Turn | EscalationCase]) -> None:
         if turn.route.route not in DOC_ROUTES:
-            await ctx.send_message(turn, target_id="product_agent")
+            await ctx.send_message(turn)
             return
         started = time.perf_counter()
         found = await self._services.retriever.search(turn.route.search_query, top=TOP_K)
@@ -118,4 +118,4 @@ class Rag(Executor):
                 target_id=ESCALATION_EXECUTOR_ID,
             )
             return
-        await ctx.send_message(turn, target_id="product_agent")
+        await ctx.send_message(turn)

@@ -1,3 +1,4 @@
+import asyncio
 import json
 
 import pytest
@@ -411,3 +412,95 @@ async def test_tool_calls_are_capped_at_five_per_turn():
     await run_turn(services, "¿mantención de la tarjeta Oro?")
 
     assert len(bank.calls) == 5
+
+
+class RendezvousBank(FakeBank):
+    """Each branch's first call waits for the other branch to start: only concurrent agents get past it."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._products_started, self._customer_started = asyncio.Event(), asyncio.Event()
+
+    async def get_product(self, product_id: str):
+        self._products_started.set()
+        await asyncio.wait_for(self._customer_started.wait(), timeout=1)
+        return await super().get_product(product_id)
+
+    async def get_customer_profile(self, customer_id: str):
+        self._customer_started.set()
+        await asyncio.wait_for(self._products_started.wait(), timeout=1)
+        return await super().get_customer_profile(customer_id)
+
+
+TENURE_ONLY = CustomerPlan(fields=["employment_tenure_months"], purpose="Verificar antigüedad laboral para el hipotecario")
+ORO_ONLY = ProductPlan(calls=[ProductCall(tool="get_product", product_id="TC-ORO")])
+
+
+def mixed_services(bank: FakeBank, *plans):
+    output = composed(DraftClaim(text="12 meses con el mismo empleador", citation_ids=["S1", "S4"]))
+    return make_services(llm=scripted(route("mixed"), *plans, output), retriever=FakeRetriever([FICHA]), bank=bank)
+
+
+async def test_product_and_customer_agents_run_concurrently_with_the_sequential_answer():
+    expected_refs = [
+        "ficha-hipotecario §Requisitos",
+        "producto:TC-ORO",
+        "cliente:C-1001 perfil",
+        "cliente:C-1001 employment_tenure_months",
+    ]
+    answers = []
+    for bank in (FakeBank(), RendezvousBank()):
+        bank.actor = "ana"
+        bank.grants[("ana", "C-1001")] = {"employment_tenure_months"}
+        services = mixed_services(bank, ORO_ONLY, TENURE_ONLY)
+        answers.append(answer_of(await run_turn(services, "¿C-1001 cumple?", actor="ana", customer_id="C-1001")))
+
+    sequential, concurrent = answers
+    assert concurrent == sequential
+    assert concurrent.status == "ok"
+    assert [citation.ref for citation in concurrent.citations] == expected_refs
+
+
+async def pause_for_access_then_approve(bank: FakeBank, services) -> list:
+    storage = InMemoryCheckpointStorage()
+    first = build_workflow(services, storage)
+    turn = Turn(session_id="s-1", message="¿C-1001 cumple?", customer_id="C-1001", actor="ana", history=[])
+    request = answer_of([event async for event in first.run(turn, stream=True)]).access_request
+    bank.grants[("ana", "C-1001")] = {"employment_tenure_months"}
+    decided = request.model_copy(update={"status": "approved", "approved_fields": ["employment_tenure_months"]})
+    resumed = build_workflow(services, storage)
+    return [
+        event
+        async for event in resumed.run(
+            responses={request.id: decided}, checkpoint_id=first.get_last_checkpoint_id(), stream=True
+        )
+    ]
+
+
+async def test_products_found_before_an_access_pause_reach_the_resumed_answer():
+    bank = FakeBank()
+    bank.actor = "ana"
+
+    answer = answer_of(await pause_for_access_then_approve(bank, mixed_services(bank, ORO_ONLY, TENURE_ONLY)))
+
+    assert answer.status == "ok"
+    assert "producto:TC-ORO" in [citation.ref for citation in answer.citations]
+
+
+class SlowProductsBank(FakeBank):
+    """The products API answers late, so product_agent keeps spending budget after customer_agent paused."""
+
+    async def get_product(self, product_id: str):
+        await asyncio.sleep(0.01)
+        return await super().get_product(product_id)
+
+
+async def test_concurrent_agents_share_five_tool_calls_across_an_access_pause():
+    bank = SlowProductsBank()
+    bank.actor = "ana"
+    greedy = ProductPlan(calls=[ProductCall(tool="get_product", product_id="TC-ORO")] * 3)
+
+    await pause_for_access_then_approve(bank, mixed_services(bank, greedy, TENURE_ONLY))
+
+    assert len(bank.calls) == 5
+    assert bank.calls[-1] == ("get_customer_fields", {"customer_id": "C-1001", "fields": ["employment_tenure_months"]})

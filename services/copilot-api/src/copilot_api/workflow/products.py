@@ -1,4 +1,5 @@
 import time
+from dataclasses import dataclass, field
 from typing import Literal
 
 from agent_framework import Executor, WorkflowContext, handler
@@ -8,7 +9,7 @@ from pydantic import BaseModel, ValidationError
 from copilot_api.mcp_bank import ToolFailed
 from copilot_api.prompts import load_prompt
 from copilot_api.workflow.trace import emit_trace
-from copilot_api.workflow.turn import Services, Turn, TurnResult, take_tool_call
+from copilot_api.workflow.turn import Services, Turn, take_tool_call
 
 PRODUCT_ROUTES = ("product", "mixed")
 PRODUCTS_UNAVAILABLE = "No pude consultar la API de productos; la respuesta no incluye datos vigentes de productos."
@@ -23,6 +24,15 @@ class ProductCall(BaseModel):
 
 class ProductPlan(BaseModel):
     calls: list[ProductCall]
+
+
+@dataclass
+class ProductFindings:
+    """product_agent's half of the fan-in. It runs beside customer_agent on the same Turn, so it writes
+    only the shared tool budget there and hands everything else to the composer."""
+
+    products: list[Product] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)
 
 
 class Products(Executor):
@@ -40,9 +50,10 @@ class Products(Executor):
         return await bank.compare_products(call.product_ids)
 
     @handler
-    async def run(self, turn: Turn, ctx: WorkflowContext[Turn, TurnResult]) -> None:
+    async def run(self, turn: Turn, ctx: WorkflowContext[ProductFindings]) -> None:
+        findings = ProductFindings()
         if turn.route.route not in PRODUCT_ROUTES:
-            await ctx.send_message(turn)
+            await ctx.send_message(findings)
             return
         started = time.perf_counter()
         plan, usage = await self._services.llm.structured(
@@ -65,9 +76,9 @@ class Products(Executor):
                 failed = True
                 executed[-1]["result_kind"] = "error"
                 continue
-            known = {product.id for product in turn.products}
-            turn.products.extend(product for product in found if product.id not in known)
+            known = {product.id for product in findings.products}
+            findings.products.extend(product for product in found if product.id not in known)
         if failed:
-            turn.notes.append(PRODUCTS_UNAVAILABLE)
+            findings.notes.append(PRODUCTS_UNAVAILABLE)
         await emit_trace(ctx, "product_agent", started, {"tool_calls": executed}, usage)
-        await ctx.send_message(turn)
+        await ctx.send_message(findings)
