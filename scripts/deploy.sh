@@ -75,6 +75,7 @@ step "5/9 Event Grid trigger (needs the function code deployed)"
 tf apply -input=false -auto-approve -var ingest_trigger_enabled=true
 
 step "6/9 web app build and upload"
+pnpm -C web install --frozen-lockfile
 NEXT_PUBLIC_API_BASE_URL=$(out copilot_api_url) pnpm -C web build
 pnpm dlx @azure/static-web-apps-cli@2.0.10 deploy web/out --env production \
   --deployment-token "$(out static_web_app_deployment_token)"
