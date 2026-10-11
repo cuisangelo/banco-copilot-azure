@@ -63,7 +63,8 @@ def create_server() -> FastMCP:
         headers = {"Ocp-Apim-Subscription-Key": subscription_key}
         if authorization is not None:
             headers["Authorization"] = authorization
-        async with httpx.AsyncClient(base_url=apim_base_url, timeout=10) as client:
+        # The APIs scale to zero; a cold start behind APIM takes ~25 s, so 10 s failed every first call.
+        async with httpx.AsyncClient(base_url=apim_base_url, timeout=60) as client:
             return await client.request(method, path, headers=headers, **kwargs)
 
     async def fetch_product(product_id: str) -> Product:
