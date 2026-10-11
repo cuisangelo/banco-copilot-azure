@@ -297,7 +297,7 @@ function resumed(request) {
   );
   const requirements = [
     ...approved.map((f, i) => claim(`Su ${FIELD_LABELS[f]} es ${FIELD_VALUES[f][1]}`, `g${i + 1}`)),
-    ...denied.map((f) => claim(`${FIELD_LABELS[f]}: no autorizado — verificar con el cliente`, "h1")),
+    ...denied.map((f) => claim(`${FIELD_LABELS[f][0].toUpperCase()}${FIELD_LABELS[f].slice(1)}: no autorizado — verificar con el cliente`, "h1")),
   ];
   citations.push(doc("h1", "ficha-credito-hipotecario §Requisitos", "Renta líquida mínima de $1.500.000 y antigüedad laboral mínima de 12 meses."));
   const status = approved.length ? "ok" : "insufficient";

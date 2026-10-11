@@ -16,14 +16,15 @@ export function CitationChip({ citation }: { citation: Citation }) {
   const { Icon, label } = KIND[citation.kind];
 
   return (
-    <span className="relative inline-block align-middle">
+    <span className="relative inline-block max-w-full min-w-0 align-middle">
       <button
         type="button"
         aria-expanded={open}
         aria-controls={id}
         onClick={() => setOpen(!open)}
         onKeyDown={(event) => event.key === "Escape" && setOpen(false)}
-        className={`inline-flex max-w-[16rem] items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors ${
+        title={citation.ref}
+        className={`inline-flex max-w-full items-center sm:max-w-[20rem] gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors ${
           open ? "border-brand bg-brand text-white" : "border-brand/25 bg-sky text-brand hover:border-brand/60"
         }`}
       >

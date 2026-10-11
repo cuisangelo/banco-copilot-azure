@@ -124,7 +124,7 @@ export function Chat() {
                 }`}
               />
             </div>
-            <p id="customer-hint" className={`pb-2 text-xs ${customerInvalid ? "font-semibold text-reject" : "text-muted"}`}>
+            <p id="customer-hint" className={`order-last w-full text-xs sm:order-none sm:w-auto sm:flex-1 sm:pb-2 ${customerInvalid ? "font-semibold text-reject" : "text-muted"}`}>
               {customerInvalid
                 ? "Usa el formato C-1234"
                 : session?.role === "Asesor"
