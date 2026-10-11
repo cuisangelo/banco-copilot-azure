@@ -20,6 +20,15 @@ step() { printf '\n== %s\n' "$1"; }
 
 step "1/9 infra (Event Grid trigger and custom domain come later)"
 tf init -input=false -reconfigure -backend-config="path=$TF_STATE_PATH"
+# Cosmos refuses new accounts in regions closed to the subscription and leaves a Failed account
+# behind, so check access before applying.
+cosmos_location=$(tf console <<'EOF' | tr -d '"'
+var.cosmos_location
+EOF
+)
+az cosmosdb locations list --query "[?properties.isSubscriptionRegionAccessAllowedForRegular].name" -o tsv |
+  tr -d ' ' | tr '[:upper:]' '[:lower:]' | grep -qx "$cosmos_location" ||
+  { echo "Cosmos is closed to this subscription in $cosmos_location; pick another cosmos_location" >&2; exit 1; }
 tf apply -input=false -auto-approve
 
 rg=$(out resource_group_name)
