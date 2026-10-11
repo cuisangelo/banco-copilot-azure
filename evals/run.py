@@ -10,6 +10,7 @@ import sys
 import uuid
 from pathlib import Path
 
+import httpx
 from azure.ai.evaluation import GroundednessEvaluator, RetrievalEvaluator, SimilarityEvaluator
 from azure.identity import DefaultAzureCredential
 
@@ -76,8 +77,15 @@ def main() -> int:
     rows = [json.loads(line) for line in (EVALS_DIR / "dataset.jsonl").read_text(encoding="utf-8").splitlines()]
 
     results, details = [], []
+    raw = (EVALS_DIR / "results.jsonl").open("w", encoding="utf-8")
     for row in rows:
-        answer, traces, error, latency = run_row(client, row)
+        try:
+            answer, traces, error, latency = run_row(client, row)
+        except httpx.HTTPError as exc:
+            # One broken stream is a failed row, not a reason to lose the rest of the run.
+            answer, traces, error, latency = None, [], {"code": f"transport:{type(exc).__name__}"}, 0
+        raw.write(json.dumps({"id": row["id"], "answer": answer, "error": error, "traces": traces},
+                             ensure_ascii=False) + "\n")
         status = error["code"] if error else answer["status"]
         got_refs = [c["ref"] for c in answer.get("citations", [])] if answer else []
         result = RowResult(
@@ -94,6 +102,7 @@ def main() -> int:
                         **scores, "leaks": result.leaks})
         print(f"{row['id']} {row['type']:28} {status:16} {'OK' if result.status_ok else 'MISS'}", flush=True)
 
+    raw.close()
     summary = summarize(results)
     for key in ("similarity", "groundedness", "retrieval"):
         values = [d[key] for d in details if key in d]
