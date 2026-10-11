@@ -1,0 +1,24 @@
+[
+  {
+    "customer_id": "C-1042",
+    "segment": "personas",
+    "income_type": "dependiente",
+    "products": ["CTA-SUELDO"],
+    "customer_tenure_months": 38,
+    "monthly_income": 1450000,
+    "current_debt": 320000,
+    "payment_behavior": "al_dia",
+    "employment_tenure_months": 18
+  },
+  {
+    "customer_id": "C-2001",
+    "segment": "preferente",
+    "income_type": "independiente",
+    "products": ["CTA-CTE", "TC-PLATINUM"],
+    "customer_tenure_months": 120,
+    "monthly_income": 4200000,
+    "current_debt": 9800000,
+    "payment_behavior": "atraso_30",
+    "employment_tenure_months": 64
+  }
+]
