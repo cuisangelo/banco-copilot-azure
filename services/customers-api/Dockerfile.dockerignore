@@ -1,0 +1,10 @@
+*
+!pyproject.toml
+!uv.lock
+!packages/contracts
+!services/customers-api
+!data/customers.json
+**/__pycache__
+**/.venv
+packages/contracts/tests
+services/customers-api/tests

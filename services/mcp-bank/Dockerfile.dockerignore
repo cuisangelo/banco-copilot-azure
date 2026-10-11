@@ -1,0 +1,9 @@
+*
+!pyproject.toml
+!uv.lock
+!packages/contracts
+!services/mcp-bank
+**/__pycache__
+**/.venv
+packages/contracts/tests
+services/mcp-bank/tests
