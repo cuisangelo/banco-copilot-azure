@@ -305,6 +305,19 @@ Rutas en APIM:
 `copilot-api` la pone en el cliente MCP (`MCPStreamableHTTPTool(..., headers=...)`), nunca en los
 argumentos de la tool.
 
+### Archivos de datos
+
+- `data/products.json`: lista de `Product`.
+- `data/customers.json`: lista de objetos planos.
+  - Cada objeto trae exactamente los campos de `CustomerProfile` (`customer_id`, `segment`,
+    `income_type`, `products`, `customer_tenure_months`) más las 4 claves de `Level2Field`:
+    - `monthly_income`: int, en CLP;
+    - `current_debt`: int, en CLP;
+    - `payment_behavior`: str, uno de `al_dia`, `atraso_30` o `atraso_90`;
+    - `employment_tenure_months`: int.
+  - No hay ninguna otra clave. `customers-api` la valida al arrancar y falla si sobra o falta una.
+  - `products` usa ids que existen en `products.json`.
+
 ### Índice de AI Search `bank-docs`
 
 | Campo | Tipo | Notas |
@@ -357,9 +370,9 @@ Contenedores de Cosmos (base `copilot`):
   - `AccessRequestCreate` rechaza un `purpose` de menos de 10 caracteres y una lista de `fields`
     vacía.
   - `require_env` lanza un error si la variable falta.
-- [ ] Correr `uv run pytest packages/contracts -q` → FAIL (falta el módulo).
+- [ ] Correr `uv run --all-packages pytest packages/contracts -q` → FAIL (falta el módulo).
 - [ ] Implementar los módulos tal cual el código de arriba.
-- [ ] Correr `uv run pytest packages/contracts -q` → PASS.
+- [ ] Correr `uv run --all-packages pytest packages/contracts -q` → PASS.
 - [ ] Commit: `✨ feat(contracts): add shared models, persona auth and tool names`.
 - [ ] Integrar la rama a `main` (fast-forward local) para que las sesiones partan de ahí.
 
@@ -462,7 +475,7 @@ Grafo de dependencias: todos dependen solo de la Fase 0, y entre ellos se integr
   - Tests con clientes falsos: el lote se divide bien y el error de upsert se propaga.
 - [ ] **2.5** `function_app.py`: blob trigger con `source=EventGrid` sobre `docs/{name}`.
   `scripts/ingest_local.py`, para ingerir `data/docs` directo desde la laptop.
-- [ ] **Aceptación:** `uv run pytest functions/ingest -q` en verde, y `uv run python -I -c "import
+- [ ] **Aceptación:** `uv run --all-packages pytest functions/ingest -q` en verde, y `uv run python -I -c "import
   json; from bank_contracts.models import Product; [Product(**p) for p in
   json.load(open('data/products.json'))]"` sin errores.
 
@@ -513,7 +526,7 @@ Grafo de dependencias: todos dependen solo de la Fase 0, y entre ellos se integr
   - Valida las respuestas con Pydantic antes de devolverlas.
   - Tests con un cliente MCP en memoria y `respx` para las APIs.
 - [ ] **3.5** Dockerfiles: `python:3.12-slim`, `uv sync --frozen --no-dev` y usuario no root.
-- [ ] **Aceptación:** `uv run pytest services/products-api services/customers-api services/mcp-bank
+- [ ] **Aceptación:** `uv run --all-packages pytest services/products-api services/customers-api services/mcp-bank
   -q` en verde, más `docker build` de los 3 servicios.
 
 ### WP4: copilot-api (workflow agéntico)
@@ -589,7 +602,7 @@ predeterminadas por nodo.
   - Cada `TraceEvent` lleva tokens y costo.
   - Tests: el span con un RUT sale enmascarado y `cost_usd > 0` en una llamada real del flujo (fake
     LLM con `usage`).
-- [ ] **Aceptación:** `uv run pytest services/copilot-api -q` en verde, más `docker build`.
+- [ ] **Aceptación:** `uv run --all-packages pytest services/copilot-api -q` en verde, más `docker build`.
 
 ### WP5: web (Next.js)
 
@@ -662,7 +675,7 @@ Tests con Vitest y Testing Library.
 ### Integración y despliegue (sesión coordinadora, requiere aprobación del usuario)
 
 1. Merge de los WP a `main` en este orden: WP2 → WP3 → WP4 → WP5 → WP1.
-2. `uv run pytest -q` y `pnpm -C web build` en `main`.
+2. `uv run --all-packages pytest -q` y `pnpm -C web build` en `main`.
 3. **Con aprobación del usuario:** `terraform apply`, build y push de las imágenes, `scripts/ingest_local.py`,
    SWA y la prueba de humo.
 4. WP6 contra la URL real. README con la arquitectura, las capturas y el enlace al reporte de
