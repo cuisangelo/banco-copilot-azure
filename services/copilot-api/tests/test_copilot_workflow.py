@@ -117,6 +117,17 @@ INCOME_AND_DEBT = CustomerPlan(
 )
 
 
+async def test_customer_route_also_searches_the_bank_rules():
+    retriever = FakeRetriever([])
+    services = make_services(
+        llm=scripted(route("customer", customer_id="C-1001"), INCOME_AND_DEBT), retriever=retriever
+    )
+
+    await run_turn(services, "¿C-1001 cumple para el hipotecario?", actor="ana")
+
+    assert retriever.queries == ["consulta"]
+
+
 async def test_denied_fields_require_access_for_exactly_those_fields():
     bank, store = FakeBank(), InMemoryStore()
     bank.actor = "ana"

@@ -13,7 +13,9 @@ from copilot_api.workflow.turn import Services, Turn
 
 TOP_K = 5
 RERANKER_THRESHOLD = 1.5
-DOC_ROUTES = ("procedure", "mixed")
+# customer is searched too: "does this customer qualify" needs the bank's rules, and the router
+# labels those questions customer instead of mixed often enough that the prompt alone can't fix it.
+DOC_ROUTES = ("procedure", "mixed", "customer")
 
 NOT_FOUND_MESSAGE = "No lo encuentro en la documentación vigente. Puedo ayudarte a escalar la consulta."
 
