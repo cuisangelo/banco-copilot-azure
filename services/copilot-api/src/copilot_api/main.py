@@ -8,6 +8,10 @@ from typing import Literal
 import httpx
 import openai
 from agent_framework import Workflow, WorkflowEvent
+from agent_framework.openai import OpenAIChatCompletionClient, OpenAIEmbeddingClient
+from azure.cosmos.aio import CosmosClient
+from azure.identity.aio import DefaultAzureCredential
+from azure.search.documents.aio import SearchClient
 from bank_contracts.auth import PERSONAS, Role
 from bank_contracts.models import (
     AccessDecision,
@@ -18,6 +22,7 @@ from bank_contracts.models import (
     EscalationDraft,
     ErrorEvent,
 )
+from bank_contracts.settings import require_env
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -26,13 +31,17 @@ from opentelemetry import trace
 from pydantic import BaseModel
 
 from copilot_api.grants import GrantConflict, GrantsClient
+from copilot_api.guards.content_safety import ContentSafety
 from copilot_api.guards.rate_limit import RateLimiter
 from copilot_api.guards.token_cap import TokenCap, TokenCapExceeded, utc_day
+from copilot_api.mcp_bank import McpBankTools
 from copilot_api.personas import InvalidToken, PersonaIssuer, Principal
-from copilot_api.store import AlreadyDecided, InMemoryStore, PendingCheckpoint, SessionRecord
+from copilot_api.store import AlreadyDecided, CosmosStore, InMemoryStore, PendingCheckpoint, SessionRecord
+from copilot_api.telemetry import configure_telemetry
 from copilot_api.workflow.escalation import EscalationOutcome
 from copilot_api.workflow.graph import WORKFLOW_NAME, build_workflow
 from copilot_api.workflow.llm import Llm
+from copilot_api.workflow.rag import AzureSearchRetriever
 from copilot_api.workflow.trace import TRACE_EVENT_TYPE
 from copilot_api.workflow.turn import BankTools, HistoryEntry, Retriever, Safety, Services, Turn, TurnResult
 
@@ -41,6 +50,8 @@ tracer = trace.get_tracer(__name__)
 
 PersonaKey = Literal[tuple(PERSONAS)]
 HISTORY_TURNS = 10
+RATE_LIMIT_PER_MINUTE = 10
+COGNITIVE_SERVICES_SCOPE = "https://cognitiveservices.azure.com/.default"
 OMITTED_ANSWER = "(respuesta con datos sensibles del cliente; no se conserva en el historial)"
 
 
@@ -57,7 +68,7 @@ class SessionResponse(BaseModel):
 @dataclass
 class Deps:
     personas: PersonaIssuer
-    store: InMemoryStore
+    store: InMemoryStore | CosmosStore
     llm: Llm
     safety: Safety
     retriever: Retriever
@@ -320,3 +331,55 @@ def create_app(deps: Deps) -> FastAPI:
         return decided
 
     return app
+
+
+def deps_from_env() -> Deps:
+    """Production wiring: every setting is required and every Azure call authenticates with the managed identity."""
+    credential = DefaultAzureCredential()
+    openai_endpoint = require_env("AZURE_OPENAI_ENDPOINT")
+    api_version = require_env("AZURE_OPENAI_API_VERSION")
+    chat_deployment = require_env("AZURE_OPENAI_CHAT_DEPLOYMENT")
+    chat = OpenAIChatCompletionClient(
+        model=chat_deployment, azure_endpoint=openai_endpoint, api_version=api_version, credential=credential
+    )
+    embeddings = OpenAIEmbeddingClient(
+        model=require_env("AZURE_OPENAI_EMBEDDING_DEPLOYMENT"),
+        azure_endpoint=openai_endpoint,
+        api_version=api_version,
+        credential=credential,
+    )
+    search = SearchClient(require_env("SEARCH_ENDPOINT"), require_env("SEARCH_INDEX"), credential)
+
+    async def cognitive_services_token() -> str:
+        return (await credential.get_token(COGNITIVE_SERVICES_SCOPE)).token
+
+    http = httpx.AsyncClient(timeout=30)
+    cosmos = CosmosClient(require_env("COSMOS_ENDPOINT"), credential=credential)
+    store = CosmosStore(cosmos.get_database_client(require_env("COSMOS_DATABASE")))
+    mcp_bank_url = require_env("MCP_BANK_URL")
+    return Deps(
+        personas=PersonaIssuer(
+            private_key_pem=require_env("PERSONA_PRIVATE_KEY_PEM"), key_id=require_env("PERSONA_KEY_ID")
+        ),
+        store=store,
+        llm=Llm(chat, model=chat_deployment),
+        safety=ContentSafety(
+            endpoint=require_env("CONTENT_SAFETY_ENDPOINT"), http=http, token_provider=cognitive_services_token
+        ),
+        retriever=AzureSearchRetriever(search, embeddings),
+        connect_bank=lambda token: McpBankTools.connect(mcp_bank_url, token=token),
+        grants=GrantsClient(
+            apim_base_url=require_env("APIM_BASE_URL"),
+            subscription_key=require_env("APIM_SUBSCRIPTION_KEY"),
+            http=http,
+        ),
+        token_cap=TokenCap(store, daily_cap=int(require_env("DAILY_TOKEN_CAP"))),
+        rate_limiter=RateLimiter(per_minute=RATE_LIMIT_PER_MINUTE),
+        cors_origin=require_env("CORS_ORIGIN"),
+    )
+
+
+def build_app() -> FastAPI:
+    """Entry point for `uvicorn --factory copilot_api.main:build_app`."""
+    configure_telemetry(require_env("APPLICATIONINSIGHTS_CONNECTION_STRING"))
+    return create_app(deps_from_env())

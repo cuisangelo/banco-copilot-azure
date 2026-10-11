@@ -4,7 +4,7 @@ import logging
 import httpx
 import pytest
 from agent_framework.observability import enable_instrumentation, enable_sensitive_telemetry
-from agent_framework.openai import OpenAIChatClient
+from agent_framework.openai import OpenAIChatCompletionClient
 from openai import AsyncOpenAI
 from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
@@ -41,44 +41,34 @@ def _exported_values(memory: InMemorySpanExporter) -> list[str]:
     return values
 
 
-def _responses_api(request: httpx.Request) -> httpx.Response:
+def _chat_completions(request: httpx.Request) -> httpx.Response:
     decision = RouteDecision(route="procedure", search_query="requisitos de crédito de consumo")
     return httpx.Response(
         200,
         json={
-            "id": "resp_1",
-            "object": "response",
-            "created_at": 1760000000,
+            "id": "chatcmpl-1",
+            "object": "chat.completion",
+            "created": 1760000000,
             "model": "gpt-4.1-mini",
-            "status": "completed",
-            "output": [
+            "choices": [
                 {
-                    "type": "message",
-                    "id": "msg_1",
-                    "role": "assistant",
-                    "status": "completed",
-                    "content": [{"type": "output_text", "text": decision.model_dump_json(), "annotations": []}],
+                    "index": 0,
+                    "finish_reason": "stop",
+                    "message": {"role": "assistant", "content": decision.model_dump_json()},
                 }
             ],
-            "parallel_tool_calls": False,
-            "tool_choice": "auto",
-            "tools": [],
-            "usage": {
-                "input_tokens": 1000,
-                "output_tokens": 200,
-                "total_tokens": 1200,
-                "input_tokens_details": {"cached_tokens": 0},
-                "output_tokens_details": {"reasoning_tokens": 0},
-            },
+            "usage": {"prompt_tokens": 1000, "completion_tokens": 200, "total_tokens": 1200},
         },
     )
 
 
 async def test_real_chat_client_spans_mask_rut_and_card_and_report_cost(exported):
     openai = AsyncOpenAI(
-        api_key="test", base_url="https://aoai.example/openai/v1/", http_client=httpx.AsyncClient(transport=httpx.MockTransport(_responses_api))
+        api_key="test",
+        base_url="https://aoai.example/openai/v1/",
+        http_client=httpx.AsyncClient(transport=httpx.MockTransport(_chat_completions)),
     )
-    llm = Llm(OpenAIChatClient(model="gpt-4.1-mini", async_client=openai), model="gpt-4.1-mini")
+    llm = Llm(OpenAIChatCompletionClient(model="gpt-4.1-mini", async_client=openai), model="gpt-4.1-mini")
     exported.clear()
 
     decision, usage = await llm.structured(
