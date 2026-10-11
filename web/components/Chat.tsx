@@ -6,6 +6,7 @@ import { nodeLabel } from "@/lib/labels";
 import { useSession } from "@/lib/session";
 import { CUSTOMER_ID_PATTERN, type AccessRequest, type ChatAnswer, type TraceEvent } from "@/lib/types";
 import { AccessRequestCard } from "./AccessRequestCard";
+import { AnswerFeedback } from "./AnswerFeedback";
 import { AnswerCard } from "./AnswerCard";
 import { EscalationCard } from "./EscalationCard";
 import { PanelIcon, SendIcon } from "./icons";
@@ -178,7 +179,7 @@ export function Chat() {
               </div>
             )}
 
-            {turns.map((turn) => (
+            {turns.map((turn, index) => (
               <div key={turn.id} className="space-y-3">
                 <div className="flex flex-col items-end gap-1">
                   {turn.customerId && (
@@ -221,6 +222,13 @@ export function Chat() {
                     {turn.answer.escalation && (
                       <EscalationCard draft={turn.answer.escalation} token={session?.token ?? null} onUnauthorized={expire} />
                     )}
+                    <AnswerFeedback
+                      sessionId={sessionId}
+                      turnIndex={index}
+                      answerStatus={turn.answer.status}
+                      token={session?.token ?? null}
+                      onUnauthorized={expire}
+                    />
                   </AnswerCard>
                 )}
               </div>
