@@ -10,6 +10,8 @@ from pydantic import BaseModel
 
 from copilot_api.grants import GrantConflict
 from copilot_api.mcp_bank import ToolFailed
+from copilot_api.workflow.llm import Usage
+from copilot_api.workflow.rag import Retrieval, RetrievalMode
 
 
 class FakeChatClient:
@@ -155,10 +157,11 @@ class FakeGrants:
 
 
 class FakeRetriever:
-    def __init__(self, chunks):
+    def __init__(self, chunks, *, mode: RetrievalMode = "hybrid", subqueries: list[str] | None = None, usage: Usage | None = None):
         self.chunks = chunks
         self.queries: list[str] = []
+        self._mode, self._subqueries, self._usage = mode, subqueries or [], usage
 
-    async def search(self, query: str, *, top: int):
+    async def search(self, query: str, *, top: int) -> Retrieval:
         self.queries.append(query)
-        return self.chunks[:top]
+        return Retrieval(mode=self._mode, chunks=self.chunks[:top], subqueries=self._subqueries, usage=self._usage)

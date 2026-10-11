@@ -10,7 +10,7 @@ from copilot_api.store import InMemoryStore
 from copilot_api.workflow.composer import ComposerOutput, DraftClaim
 from copilot_api.workflow.customer import CustomerPlan
 from copilot_api.workflow.graph import build_workflow
-from copilot_api.workflow.llm import Llm
+from copilot_api.workflow.llm import Llm, Usage
 from copilot_api.workflow.products import ProductCall, ProductPlan
 from copilot_api.workflow.rag import Chunk
 from copilot_api.workflow.router import RouteDecision
@@ -412,6 +412,37 @@ async def test_tool_calls_are_capped_at_five_per_turn():
     await run_turn(services, "¿mantención de la tarjeta Oro?")
 
     assert len(bank.calls) == 5
+
+
+def rag_trace(events):
+    (trace,) = [event.data for event in events if event.type == TRACE_EVENT_TYPE and event.data.node == "rag_agent"]
+    return trace
+
+
+async def test_rag_trace_reports_hybrid_retrieval_without_subqueries():
+    services = make_services(
+        llm=scripted(route("procedure"), composed(DraftClaim(text="12 meses", citation_ids=["S1"]))),
+        retriever=FakeRetriever([FICHA]),
+    )
+
+    trace = rag_trace(await run_turn(services, "¿antigüedad laboral para el hipotecario?"))
+
+    assert trace.data["retrieval_mode"] == "hybrid"
+    assert "subqueries" not in trace.data
+
+
+async def test_rag_trace_reports_agentic_subqueries_and_their_planning_tokens():
+    planned = ["requisitos tarjeta Oro", "requisitos tarjeta Platinum"]
+    retriever = FakeRetriever([FICHA], mode="agentic", subqueries=planned, usage=Usage(500, 40, 0.000264))
+    services = make_services(
+        llm=scripted(route("procedure"), composed(DraftClaim(text="12 meses", citation_ids=["S1"]))), retriever=retriever
+    )
+
+    trace = rag_trace(await run_turn(services, "¿Diferencia entre Oro y Platinum?"))
+
+    assert trace.data["retrieval_mode"] == "agentic"
+    assert trace.data["subqueries"] == planned
+    assert (trace.tokens_in, trace.tokens_out, trace.cost_usd) == (500, 40, 0.000264)
 
 
 class RendezvousBank(FakeBank):

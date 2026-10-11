@@ -1,4 +1,6 @@
 import time
+from dataclasses import dataclass, field
+from typing import Literal
 
 from agent_framework import Executor, WorkflowContext, handler
 from agent_framework.openai import OpenAIEmbeddingClient
@@ -8,6 +10,7 @@ from bank_contracts.models import ChatAnswer
 from pydantic import BaseModel
 
 from copilot_api.workflow.escalation import ESCALATION_EXECUTOR_ID, EscalationCase
+from copilot_api.workflow.llm import Usage
 from copilot_api.workflow.trace import emit_trace
 from copilot_api.workflow.turn import Services, Turn
 
@@ -33,6 +36,19 @@ class Chunk(BaseModel):
     reranker_score: float
 
 
+RetrievalMode = Literal["hybrid", "agentic"]
+
+
+@dataclass
+class Retrieval:
+    """One search: its chunks, the subqueries an agentic plan ran, and the model tokens that plan spent."""
+
+    mode: RetrievalMode
+    chunks: list[Chunk]
+    subqueries: list[str] = field(default_factory=list)
+    usage: Usage | None = None
+
+
 class AzureSearchRetriever:
     """Hybrid (BM25 + vector) query with semantic reranking over the `bank-docs` index."""
 
@@ -40,7 +56,7 @@ class AzureSearchRetriever:
         self._search = search
         self._embeddings = embeddings
 
-    async def search(self, query: str, *, top: int) -> list[Chunk]:
+    async def search(self, query: str, *, top: int) -> Retrieval:
         vector = (await self._embeddings.get_embeddings([query]))[0].vector
         results = await self._search.search(
             search_text=query,
@@ -50,7 +66,7 @@ class AzureSearchRetriever:
             select=["id", "doc_id", "doc_title", "section", "content"],
             top=top,
         )
-        return [
+        chunks = [
             Chunk(
                 id=result["id"],
                 doc_id=result["doc_id"],
@@ -61,6 +77,7 @@ class AzureSearchRetriever:
             )
             async for result in results
         ]
+        return Retrieval(mode="hybrid", chunks=chunks)
 
 
 class Rag(Executor):
@@ -75,7 +92,8 @@ class Rag(Executor):
             await ctx.send_message(turn)
             return
         started = time.perf_counter()
-        found = await self._services.retriever.search(turn.route.search_query, top=TOP_K)
+        retrieval = await self._services.retriever.search(turn.route.search_query, top=TOP_K)
+        found = retrieval.chunks
         relevant = [chunk for chunk in found if chunk.reranker_score >= self._threshold]
         attacks = (
             await self._services.safety.document_attacks(turn.message, [chunk.content for chunk in relevant])
@@ -108,8 +126,11 @@ class Rag(Executor):
                 ],
                 "threshold": self._threshold,
                 "dropped": dropped,
+                "retrieval_mode": retrieval.mode,
             }
+            | ({"subqueries": retrieval.subqueries} if retrieval.mode == "agentic" else {})
             | ({"guardrail": "prompt_shields_documents"} if dropped else {}),
+            retrieval.usage,
         )
         if not turn.chunks and turn.route.route == "procedure":
             answer = ChatAnswer(status="insufficient", message=NOT_FOUND_MESSAGE)
