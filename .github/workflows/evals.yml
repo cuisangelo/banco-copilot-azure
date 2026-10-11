@@ -27,6 +27,7 @@ jobs:
           AZURE_OPENAI_ENDPOINT: ${{ vars.AZURE_OPENAI_ENDPOINT }}
           AZURE_OPENAI_CHAT_DEPLOYMENT: gpt-4.1-mini
           AZURE_OPENAI_API_VERSION: "2024-10-21"
+          FOUNDRY_PROJECT_ENDPOINT: ${{ vars.FOUNDRY_PROJECT_ENDPOINT }}
         run: uv run --all-packages python -m evals.run --target "${{ vars.COPILOT_API_URL }}"
       - uses: actions/upload-artifact@v4
         if: always()

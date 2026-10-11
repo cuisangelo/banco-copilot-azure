@@ -1,6 +1,6 @@
 import json
 import time
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 
 import httpx
 
@@ -24,15 +24,20 @@ def parse_sse(lines: Iterable[str]) -> tuple[dict | None, list[dict], dict | Non
 
 
 # copilot-api allows 10 requests per minute per IP; the runner stays under it instead of bypassing it.
-MIN_SECONDS_BETWEEN_STREAMS = 6.5
+# Every call is spaced, so the runner holds whichever routes the limiter counts.
+MIN_SECONDS_BETWEEN_CALLS = 6.5
 
 
 class CopilotClient:
-    def __init__(self, base_url: str):
-        self._http = httpx.Client(base_url=base_url, timeout=120)
-        self._last_stream = 0.0
+    def __init__(self, http: httpx.Client, clock: Callable[[], float] = time.monotonic,
+                 sleep: Callable[[float], None] = time.sleep):
+        self._http = http
+        self._clock = clock
+        self._sleep = sleep
+        self._last_call = -MIN_SECONDS_BETWEEN_CALLS
 
     def token(self, persona: str) -> str:
+        self._wait_turn()
         response = self._http.post("/demo/session", json={"persona": persona})
         response.raise_for_status()
         return response.json()["token"]
@@ -45,6 +50,7 @@ class CopilotClient:
         return self._stream(f"/sessions/{session_id}/resume", token, None)
 
     def decide_access(self, supervisor_token: str, request_id: str, fields: list[str]) -> dict:
+        self._wait_turn()
         response = self._http.post(
             f"/access-requests/{request_id}/decision",
             json={"approved_fields": fields},
@@ -53,10 +59,13 @@ class CopilotClient:
         response.raise_for_status()
         return response.json()
 
+    def _wait_turn(self) -> None:
+        self._sleep(max(0.0, self._last_call + MIN_SECONDS_BETWEEN_CALLS - self._clock()))
+        self._last_call = self._clock()
+
     def _stream(self, path: str, token: str | None, body: dict | None):
         headers = {"Authorization": f"Bearer {token}"} if token else {}
-        time.sleep(max(0.0, self._last_stream + MIN_SECONDS_BETWEEN_STREAMS - time.monotonic()))
-        self._last_stream = time.monotonic()
+        self._wait_turn()
         started = time.perf_counter()
         with self._http.stream("POST", path, json=body, headers=headers) as response:
             response.raise_for_status()
