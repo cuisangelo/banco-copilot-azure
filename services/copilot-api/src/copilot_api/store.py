@@ -25,6 +25,7 @@ from bank_contracts.models import (
     Product,
 )
 from pydantic import BaseModel
+from pydantic_core import TzInfo
 
 from copilot_api.workflow.composer import ComposerOutput, DraftClaim
 from copilot_api.workflow.customer import CustomerPlan
@@ -125,6 +126,8 @@ CHECKPOINT_TYPES: frozenset[str] = frozenset(
         RouteDecision,
         HistoryEntry,
         Turn,
+        # Datetimes parsed from JSON (access requests read back from Cosmos) carry pydantic's TzInfo.
+        TzInfo,
     )
 )
 

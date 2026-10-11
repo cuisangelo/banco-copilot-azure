@@ -64,6 +64,22 @@ async def checkpoints_of_a_turn_that_pauses_twice() -> list[WorkflowCheckpoint]:
     return await storage.list_checkpoints(workflow_name="copilot")
 
 
+def test_access_request_read_back_from_json_survives_restricted_decoding():
+    from agent_framework._workflows._checkpoint_encoding import decode_checkpoint_value
+    from bank_contracts.models import AccessRequest
+
+    from copilot_api.store import CHECKPOINT_TYPES
+
+    request = AccessRequest.model_validate_json(
+        '{"customer_id": "C-1015", "fields": ["monthly_income"], "purpose": "verificar requisitos",'
+        ' "id": "r-1", "requested_by": "ana", "status": "approved", "created_at": "2026-10-11T22:04:56Z"}'
+    )
+
+    decoded = decode_checkpoint_value(encode_checkpoint_value({"request": request}), allowed_types=CHECKPOINT_TYPES)
+
+    assert decoded["request"] == request
+
+
 async def test_every_checkpoint_the_workflow_writes_survives_restricted_decoding():
     checkpoints = await checkpoints_of_a_turn_that_pauses_twice()
 
