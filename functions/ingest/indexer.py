@@ -1,9 +1,20 @@
+from pathlib import Path
+
 from azure.search.documents import SearchClient
 from openai import AzureOpenAI
 
-from chunker import Chunk
+from chunker import Chunk, chunk_document
 
 EMBEDDING_BATCH_SIZE = 16
+
+
+def ingest_directory(path: Path, openai: AzureOpenAI, deployment: str, search: SearchClient) -> list[str]:
+    ingested = []
+    for doc in sorted(path.glob("*.md")):
+        chunks = chunk_document(doc.read_text(encoding="utf-8"))
+        index_document(chunks, openai, deployment, search)
+        ingested.append(chunks[0].doc_id)
+    return ingested
 
 
 def index_document(chunks: list[Chunk], openai: AzureOpenAI, deployment: str, search: SearchClient) -> None:

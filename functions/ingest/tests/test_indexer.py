@@ -6,7 +6,7 @@ from azure.core.exceptions import HttpResponseError
 from azure.search.documents.models import IndexingResult
 
 from chunker import Chunk
-from indexer import index_document
+from indexer import index_document, ingest_directory
 
 
 def _chunks(n: int, doc_id: str = "ficha-oro") -> list[Chunk]:
@@ -117,3 +117,17 @@ def test_reingest_with_fewer_chunks_removes_stale_chunks_of_that_document_only()
 
     assert search.deleted == ["ficha-oro-5"]
     assert set(search.docs) == {"ficha-oro-0", "ficha-oro-1", "ficha-platinum-0"}
+
+
+def test_ingest_directory_indexes_every_markdown_document(tmp_path):
+    for doc_id in ("ficha-a", "ficha-b"):
+        (tmp_path / f"{doc_id}.md").write_text(
+            f"---\ndoc_id: {doc_id}\ntitle: T\nvalid_from: 2026-01-01\n---\n\n## 1. Uno\n\nx\n\n## 2. Dos\n\ny\n"
+        )
+    (tmp_path / "notas.txt").write_text("not a document")
+    search = FakeSearch()
+
+    ingested = ingest_directory(tmp_path, _openai(FakeEmbeddings()), "text-embedding-3-small", search)
+
+    assert ingested == ["ficha-a", "ficha-b"]
+    assert set(search.docs) == {"ficha-a-0", "ficha-a-1", "ficha-b-0", "ficha-b-1"}
