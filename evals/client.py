@@ -23,9 +23,14 @@ def parse_sse(lines: Iterable[str]) -> tuple[dict | None, list[dict], dict | Non
     return answer, traces, error
 
 
+# copilot-api allows 10 requests per minute per IP; the runner stays under it instead of bypassing it.
+MIN_SECONDS_BETWEEN_STREAMS = 6.5
+
+
 class CopilotClient:
     def __init__(self, base_url: str):
         self._http = httpx.Client(base_url=base_url, timeout=120)
+        self._last_stream = 0.0
 
     def token(self, persona: str) -> str:
         response = self._http.post("/demo/session", json={"persona": persona})
@@ -50,6 +55,8 @@ class CopilotClient:
 
     def _stream(self, path: str, token: str | None, body: dict | None):
         headers = {"Authorization": f"Bearer {token}"} if token else {}
+        time.sleep(max(0.0, self._last_stream + MIN_SECONDS_BETWEEN_STREAMS - time.monotonic()))
+        self._last_stream = time.monotonic()
         started = time.perf_counter()
         with self._http.stream("POST", path, json=body, headers=headers) as response:
             response.raise_for_status()
