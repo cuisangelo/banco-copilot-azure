@@ -40,6 +40,7 @@ from copilot_api.personas import InvalidToken, PersonaIssuer, Principal
 from copilot_api.store import AlreadyDecided, CosmosStore, InMemoryStore, PendingCheckpoint, SessionRecord
 from copilot_api.telemetry import configure_telemetry
 from copilot_api.workflow.escalation import EscalationOutcome
+from copilot_api.workflow.agentic import SEARCH_SCOPE, AgenticRetriever
 from copilot_api.workflow.graph import WORKFLOW_NAME, build_workflow
 from copilot_api.workflow.llm import Llm
 from copilot_api.workflow.rag import AzureSearchRetriever
@@ -359,12 +360,23 @@ def deps_from_env() -> Deps:
         api_version=api_version,
         credential=credential,
     )
-    search = SearchClient(require_env("SEARCH_ENDPOINT"), require_env("SEARCH_INDEX"), credential)
+    search_endpoint = require_env("SEARCH_ENDPOINT")
+    search = SearchClient(search_endpoint, require_env("SEARCH_INDEX"), credential)
 
     async def cognitive_services_token() -> str:
         return (await credential.get_token(COGNITIVE_SERVICES_SCOPE)).token
 
+    async def search_token() -> str:
+        return (await credential.get_token(SEARCH_SCOPE)).token
+
     http = httpx.AsyncClient(timeout=30)
+    retrieval_mode = require_env("RETRIEVAL_MODE")
+    if retrieval_mode == "hybrid":
+        retriever = AzureSearchRetriever(search, embeddings)
+    elif retrieval_mode == "agentic":
+        retriever = AgenticRetriever(search_endpoint, http=http, token_provider=search_token, model=chat_deployment)
+    else:
+        raise RuntimeError(f"RETRIEVAL_MODE must be hybrid or agentic, not {retrieval_mode!r}")
     cosmos = CosmosClient(require_env("COSMOS_ENDPOINT"), credential=credential)
     store = CosmosStore(cosmos.get_database_client(require_env("COSMOS_DATABASE")))
     mcp_bank_url = require_env("MCP_BANK_URL")
@@ -377,7 +389,7 @@ def deps_from_env() -> Deps:
         safety=ContentSafety(
             endpoint=require_env("CONTENT_SAFETY_ENDPOINT"), http=http, token_provider=cognitive_services_token
         ),
-        retriever=AzureSearchRetriever(search, embeddings),
+        retriever=retriever,
         connect_bank=lambda token: McpBankTools.connect(mcp_bank_url, token=token),
         grants=GrantsClient(
             apim_base_url=require_env("APIM_BASE_URL"),

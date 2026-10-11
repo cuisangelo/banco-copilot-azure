@@ -83,6 +83,9 @@ locals {
         DAILY_TOKEN_CAP                       = tostring(var.daily_token_cap)
         CORS_ORIGIN                           = "https://${var.web_custom_domain}"
         APPLICATIONINSIGHTS_CONNECTION_STRING = azurerm_application_insights.main.connection_string
+        # agentic needs the knowledge base from scripts/create_knowledge_base.py; it stays hybrid
+        # until the evals show agentic retrieval answers better.
+        RETRIEVAL_MODE = "hybrid"
       })
       secret_env = {
         APIM_SUBSCRIPTION_KEY   = "apim-subscription-key"
