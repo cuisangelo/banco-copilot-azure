@@ -1,0 +1,83 @@
+name: deploy
+
+# Repository variables come from `terraform -chdir=infra output github_deploy`.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "services/**"
+      - "functions/**"
+      - "packages/**"
+      - "data/**"
+      - "uv.lock"
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  images:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [copilot-api, mcp-bank, products-api, customers-api]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Build and push
+        env:
+          IMAGE: ${{ vars.ACR_NAME }}.azurecr.io/${{ matrix.service }}:${{ github.sha }}
+        run: |
+          az acr login --name "${{ vars.ACR_NAME }}"
+          docker build -f "services/${{ matrix.service }}/Dockerfile" -t "$IMAGE" .
+          docker push "$IMAGE"
+
+      - name: Roll the container app
+        run: |
+          az containerapp update \
+            --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+            --name "${{ vars.APP_NAME_PREFIX }}-${{ matrix.service }}" \
+            --image "${{ vars.ACR_NAME }}.azurecr.io/${{ matrix.service }}:${{ github.sha }}"
+
+  ingest-function:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+
+      # bank-contracts is a workspace package that a remote build cannot resolve, so the
+      # dependencies are vendored into .python_packages and the zip is deployed as-is.
+      - name: Vendor dependencies
+        run: |
+          uv export --package bank-ingest --no-hashes --no-editable --no-emit-project --frozen > functions/ingest/requirements.txt
+          uv pip install \
+            --target functions/ingest/.python_packages/lib/site-packages \
+            --python-version 3.12 \
+            --python-platform x86_64-manylinux_2_28 \
+            -r functions/ingest/requirements.txt
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - uses: Azure/functions-action@v1
+        with:
+          app-name: ${{ vars.INGEST_FUNCTION_NAME }}
+          package: functions/ingest
+          sku: flexconsumption
+          remote-build: false
