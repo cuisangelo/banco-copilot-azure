@@ -22,9 +22,11 @@ from bank_contracts.models import (
     EscalationDraft,
     GRANT_MINUTES,
     ErrorEvent,
+    Feedback,
+    FeedbackCreate,
 )
 from bank_contracts.settings import require_env
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -33,11 +35,19 @@ from pydantic import BaseModel
 
 from copilot_api.grants import GrantConflict, GrantsClient
 from copilot_api.guards.content_safety import ContentSafety
+from copilot_api.guards.pii_mask import mask_pii
 from copilot_api.guards.rate_limit import RateLimiter
 from copilot_api.guards.token_cap import TokenCap, TokenCapExceeded, utc_day
 from copilot_api.mcp_bank import McpBankTools
 from copilot_api.personas import InvalidToken, PersonaIssuer, Principal
-from copilot_api.store import AlreadyDecided, CosmosStore, InMemoryStore, PendingCheckpoint, SessionRecord
+from copilot_api.store import (
+    AlreadyDecided,
+    CosmosStore,
+    FeedbackExists,
+    InMemoryStore,
+    PendingCheckpoint,
+    SessionRecord,
+)
 from copilot_api.telemetry import configure_telemetry
 from copilot_api.workflow.escalation import EscalationOutcome
 from copilot_api.workflow.graph import WORKFLOW_NAME, build_workflow
@@ -141,7 +151,7 @@ def create_app(deps: Deps) -> FastAPI:
 
     def supervisor(who: Caller = Depends(persona)) -> Caller:
         if not who.principal.has_role("Supervisor"):
-            raise HTTPException(403, "Solo un Supervisor puede gestionar solicitudes de acceso.")
+            raise HTTPException(403, "Esta acción requiere el rol Supervisor.")
         return who
 
     def rate_limited(request: Request) -> None:
@@ -340,6 +350,25 @@ def create_app(deps: Deps) -> FastAPI:
                 data={"access_request_id": request_id, "status": status, "approved_fields": approved},
             )
         return decided
+
+    @app.post("/feedback", status_code=201, dependencies=[Depends(rate_limited)])
+    async def create_feedback(body: FeedbackCreate, who: Caller = Depends(caller)) -> dict:
+        actor = who.sub or "anonymous"
+        feedback = Feedback(
+            **{**body.model_dump(), "comment": body.comment and mask_pii(body.comment)},
+            id=f"feedback:{actor}:{body.session_id}:{body.turn_index}",
+            actor=actor,
+            created_at=datetime.now(UTC),
+        )
+        try:
+            await deps.store.create_feedback(feedback)
+        except FeedbackExists as error:
+            raise HTTPException(409, "Ya calificaste esta respuesta.") from error
+        return {"id": feedback.id}
+
+    @app.get("/feedback", dependencies=[Depends(supervisor)])
+    async def list_feedback(limit: int = Query(50, ge=1, le=200)) -> list[Feedback]:
+        return await deps.store.list_feedback(limit)
 
     return app
 
