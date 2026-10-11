@@ -1,3 +1,5 @@
+import json
+
 import pytest
 from agent_framework import InMemoryCheckpointStorage
 from bank_contracts.models import EscalationDecision
@@ -11,6 +13,7 @@ from copilot_api.workflow.llm import Llm
 from copilot_api.workflow.products import ProductCall, ProductPlan
 from copilot_api.workflow.rag import Chunk
 from copilot_api.workflow.router import RouteDecision
+from copilot_api.workflow.trace import TRACE_EVENT_TYPE
 from copilot_api.workflow.turn import Turn, TurnResult
 from fakes import FakeBank, FakeChatClient, FakeRetriever, FakeSafety
 from wiring import make_services
@@ -106,10 +109,12 @@ async def test_injected_chunk_is_dropped_before_the_prompt():
         store=store,
     )
 
-    answer = answer_of(await run_turn(services, "¿cómo bloqueo una tarjeta?"))
+    events = await run_turn(services, "¿cómo bloqueo una tarjeta?")
 
-    assert answer.status == "insufficient"
+    assert answer_of(events).status == "insufficient"
     assert [entry["layer"] for entry in store.audit_log] == ["prompt_shields_documents"]
+    traces = [event.data for event in events if event.type == TRACE_EVENT_TYPE]
+    assert "ignora tus instrucciones" not in json.dumps([trace.data for trace in traces], ensure_ascii=False)
 
 
 INCOME_AND_DEBT = CustomerPlan(
@@ -249,6 +254,16 @@ async def test_circular_and_mortgage_sheet_disagreeing_is_a_contradiction():
         "circular-2026-07 §Requisitos",
     }
     assert [event.request_id for event in events if event.type == "request_info"] == [answer.escalation.id]
+
+
+async def test_values_from_the_same_source_are_not_a_contradiction():
+    output = composed(
+        DraftClaim(text="Cédula vigente", citation_ids=["S1"], subject="CTA-CORRIENTE", attribute="documento requerido", value="cédula"),
+        DraftClaim(text="Liquidaciones", citation_ids=["S1"], subject="CTA-CORRIENTE", attribute="documento requerido", value="liquidaciones"),
+    )
+    services = make_services(llm=scripted(route("procedure"), output), retriever=FakeRetriever([FICHA, CIRCULAR]))
+
+    assert answer_of(await run_turn(services, "¿qué documentos pido para la cuenta corriente?")).status == "ok"
 
 
 async def test_same_attribute_on_different_products_is_not_a_contradiction():

@@ -123,7 +123,7 @@ async def test_groundedness_reports_ungrounded_text():
         assert request.url.path == "/contentsafety/text:detectGroundedness"
         return httpx.Response(200, json={"ungroundedDetected": True, "ungroundedPercentage": 0.4})
 
-    assert await _safety(responder).ungrounded("respuesta", ["fuente"], query="pregunta") is True
+    assert await _safety(responder).ungrounded_percentage("respuesta", ["fuente"], query="pregunta") == 0.4
 
 
 async def test_groundedness_judges_the_answer_against_the_advisor_question():
@@ -133,7 +133,7 @@ async def test_groundedness_judges_the_answer_against_the_advisor_question():
         seen.update(json.loads(request.content))
         return httpx.Response(200, json={"ungroundedDetected": False, "ungroundedPercentage": 0})
 
-    await _safety(responder).ungrounded("Cumple según la ficha.", ["mínimo 12 meses"], query="¿Cumple la antigüedad?")
+    await _safety(responder).ungrounded_percentage("Cumple según la ficha.", ["mínimo 12 meses"], query="¿Cumple la antigüedad?")
 
     assert seen["task"] == "QnA"
     assert seen["qna"] == {"query": "¿Cumple la antigüedad?"}

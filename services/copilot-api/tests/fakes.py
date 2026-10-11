@@ -47,8 +47,8 @@ class FakeSafety:
     async def document_attacks(self, user_text: str, documents: list[str]) -> list[bool]:
         return [any(snippet in document for snippet in self._attacked) for document in documents]
 
-    async def ungrounded(self, text: str, sources: list[str], *, query: str) -> bool:
-        return self._ungrounded
+    async def ungrounded_percentage(self, text: str, sources: list[str], *, query: str) -> float:
+        return 1.0 if self._ungrounded else 0.0
 
 
 PROFILES = {

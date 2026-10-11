@@ -1,4 +1,5 @@
 import time
+from itertools import combinations
 
 from agent_framework import Executor, WorkflowContext, handler
 from bank_contracts.models import LEVEL2_FIELDS, ChatAnswer, Claim
@@ -27,26 +28,29 @@ def _normalize(text: str) -> str:
     return " ".join(text.casefold().split())
 
 
-def find_contradiction(claims: list[DraftClaim]) -> str | None:
-    """The first attribute whose conflicting values change the conclusion, if any.
+def find_contradiction(claims: list[DraftClaim], customer_citation_ids: set[str]) -> str | None:
+    """The first attribute on which two sources disagree in a way that changes the conclusion, if any.
 
-    Without a customer verdict every conflict matters; with one, sources that disagree on the value but
-    agree on whether this customer meets it lead to the same answer, which then cites both.
+    Only values backed by disjoint bank sources conflict: one sheet listing several documents is a
+    list, not a contradiction, and customer data is cited by both sides so it does not count. Without
+    a customer verdict every conflict matters; with one, sources that disagree on the value but agree on
+    whether this customer meets it lead to the same answer, which then cites both.
     """
-    values: dict[tuple[str, str], set[str]] = {}
-    verdicts: dict[tuple[str, str], set[bool | None]] = {}
+    groups: dict[tuple[str, str], list[tuple[str, frozenset[str], bool | None]]] = {}
     names: dict[tuple[str, str], str] = {}
     for claim in claims:
         if claim.attribute and claim.value:
             # The same attribute on two products (minimum age of Oro vs Platinum) is not a conflict.
             key = (_normalize(claim.subject or ""), _normalize(claim.attribute))
             names.setdefault(key, claim.attribute.strip())
-            values.setdefault(key, set()).add(_normalize(claim.value))
-            verdicts.setdefault(key, set()).add(claim.customer_meets)
-    return next(
-        (names[key] for key, seen in values.items() if len(seen) > 1 and (None in verdicts[key] or len(verdicts[key]) > 1)),
-        None,
-    )
+            sources = frozenset(claim.citation_ids) - customer_citation_ids
+            groups.setdefault(key, []).append((_normalize(claim.value), sources, claim.customer_meets))
+    for key, entries in groups.items():
+        for (value_a, sources_a, meets_a), (value_b, sources_b, meets_b) in combinations(entries, 2):
+            disjoint = sources_a and sources_b and sources_a.isdisjoint(sources_b)
+            if value_a != value_b and disjoint and (meets_a is None or meets_b is None or meets_a != meets_b):
+                return names[key]
+    return None
 
 
 def _claims(drafts: list[DraftClaim]) -> list[Claim]:
@@ -71,16 +75,18 @@ class Verifier(Executor):
         claims = composed.requirements + composed.steps
         known = {citation.id for citation in turn.citations}
         text = "\n".join([composed.message, *(claim.text for claim in claims)])
-        ungrounded = await self._services.safety.ungrounded(
+        ungrounded_share = await self._services.safety.ungrounded_percentage(
             text, [citation.snippet for citation in turn.citations], query=turn.message
         )
+        ungrounded = ungrounded_share > 0
         uncited = [claim.text for claim in claims if not claim.citation_ids or not set(claim.citation_ids) <= known]
-        conflict = None if ungrounded or uncited else find_contradiction(claims)
+        customer_ids = {citation.id for citation in turn.citations if citation.kind == "customer"}
+        conflict = None if ungrounded or uncited else find_contradiction(claims, customer_ids)
         await emit_trace(
             ctx,
             "verifier",
             started,
-            {"uncited_claims": len(uncited), "contradiction": conflict}
+            {"uncited_claims": len(uncited), "contradiction": conflict, "ungrounded_percentage": round(ungrounded_share, 2)}
             | ({"guardrail": "groundedness"} if ungrounded else {}),
         )
         if ungrounded or uncited:

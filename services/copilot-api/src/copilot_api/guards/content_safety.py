@@ -61,7 +61,8 @@ class ContentSafety:
             attacks += [analysis["attackDetected"] for analysis in result["documentsAnalysis"]]
         return attacks
 
-    async def ungrounded(self, text: str, sources: list[str], *, query: str) -> bool:
+    async def ungrounded_percentage(self, text: str, sources: list[str], *, query: str) -> float:
+        """Share of the text (0–1) that the sources do not support; 0 when it is fully grounded."""
         # QnA, not Summarization: an answer draws conclusions ("cumple según la ficha") that
         # Summarization flags as ungrounded even when every premise is in the sources.
         result = await self._post(
@@ -69,4 +70,4 @@ class ContentSafety:
             GROUNDEDNESS_API_VERSION,
             {"domain": "Generic", "task": "QnA", "qna": {"query": query}, "text": text, "groundingSources": sources},
         )
-        return result["ungroundedDetected"]
+        return float(result["ungroundedPercentage"]) if result["ungroundedDetected"] else 0.0

@@ -14,6 +14,7 @@ from copilot_api.workflow.turn import Services, Turn
 # 5 let a comparison fill up with one product's sheet (all Platinum, no Oro), leaving the other
 # product's claims ungrounded.
 TOP_K = 8
+BLOCKED_CONTENT = "[bloqueado por Prompt Shields]"
 RERANKER_THRESHOLD = 1.5
 # Every answering route searches: product sheets carry benefits the products API lacks, and "does
 # this customer qualify" needs the bank's rules even when the router labels it customer, not mixed.
@@ -100,7 +101,8 @@ class Rag(Executor):
                         "doc_id": chunk.doc_id,
                         "section": chunk.section,
                         "score": chunk.reranker_score,
-                        "content": chunk.content,
+                        # Injected text never reaches the model, and it does not reach the inspector either.
+                        "content": BLOCKED_CONTENT if chunk.id in dropped else chunk.content,
                     }
                     for chunk in found
                 ],
