@@ -13,7 +13,7 @@ import pytest
 from pydantic import BaseModel, TypeAdapter
 
 from bank_contracts.auth import PERSONAS
-from bank_contracts.models import AccessRequest, ChatAnswer, ErrorEvent, TraceEvent
+from bank_contracts.models import AccessRequest, ChatAnswer, ErrorEvent, Feedback, TraceEvent
 
 SERVER = Path(__file__).with_name("server.mjs")
 SSE_MODELS: dict[str, type[BaseModel]] = {"trace": TraceEvent, "answer": ChatAnswer, "error": ErrorEvent}
@@ -141,6 +141,22 @@ def test_escalation_decision(base_url):
     escalation = events[-1][1].escalation
     status, text = call(base_url, "POST", f"/escalations/{escalation.id}/decision", {"approve": True})
     assert status == 200 and set(json.loads(text)) == {"ticket_id"}
+
+
+def test_feedback_round_trip(base_url):
+    ana, sofia = login(base_url, "ana"), login(base_url, "sofia")
+    rating = {"session_id": "s-fb", "turn_index": 0, "rating": "down", "comment": "RUT 12.345.678-5", "answer_status": "ok"}
+
+    status, text = call(base_url, "POST", "/feedback", rating, ana)
+    assert status == 201 and json.loads(text) == {"id": "feedback:ana:s-fb:0"}
+    assert call(base_url, "POST", "/feedback", rating, ana)[0] == 409
+    assert call(base_url, "POST", "/feedback", {**rating, "comment": None}, None)[0] == 201
+    assert call(base_url, "GET", "/feedback?limit=50", token=ana)[0] == 403
+
+    status, text = call(base_url, "GET", "/feedback?limit=50", token=sofia)
+    listed = [assert_exact(Feedback, item) for item in json.loads(text)]
+    assert [item.actor for item in listed][:2] == ["anonymous", "ana"]
+    assert listed[1].comment == "RUT [RUT]"
 
 
 def test_unknown_token_is_401(base_url):

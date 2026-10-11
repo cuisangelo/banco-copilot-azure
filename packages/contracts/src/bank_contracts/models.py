@@ -127,3 +127,17 @@ class TraceEvent(BaseModel):
 class ErrorEvent(BaseModel):
     code: Literal["token_cap", "rate_limited", "upstream", "unauthorized", "internal"]
     message: str
+
+
+class FeedbackCreate(BaseModel):
+    session_id: str
+    turn_index: int = Field(ge=0)           # position of the turn in the session, 0-based
+    rating: Literal["up", "down"]
+    comment: str | None = Field(default=None, max_length=500)
+    answer_status: ChatStatus
+
+
+class Feedback(FeedbackCreate):
+    id: str
+    actor: str                               # persona sub or "anonymous"
+    created_at: datetime

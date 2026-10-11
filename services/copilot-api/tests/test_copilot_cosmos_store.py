@@ -5,14 +5,14 @@ Opt-in: set COSMOS_EMULATOR_ENDPOINT (e.g. http://localhost:8081) to run; skippe
 
 import os
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from azure.cosmos import PartitionKey
 from azure.cosmos.aio import CosmosClient
-from bank_contracts.models import AccessRequest
+from bank_contracts.models import AccessRequest, Feedback
 
-from copilot_api.store import AlreadyDecided, CosmosStore, PendingCheckpoint, SessionRecord
+from copilot_api.store import AlreadyDecided, CosmosStore, FeedbackExists, PendingCheckpoint, SessionRecord
 from copilot_api.workflow.graph import build_workflow
 from copilot_api.workflow.llm import Llm
 from copilot_api.workflow.turn import HistoryEntry, Turn, TurnResult
@@ -127,3 +127,29 @@ async def test_workflow_pauses_and_resumes_through_cosmos_checkpoints(store):
     (result,) = [event.data for event in events if isinstance(event.data, TurnResult)]
     assert result.answer.status == "ok"
     assert len(await storage.list_checkpoints(workflow_name="copilot")) >= 1
+
+
+def feedback(actor: str, turn_index: int, minutes_ago: int) -> Feedback:
+    return Feedback(
+        id=f"feedback:{actor}:s-1:{turn_index}",
+        actor=actor,
+        created_at=datetime.now(UTC) - timedelta(minutes=minutes_ago),
+        session_id="s-1",
+        turn_index=turn_index,
+        rating="down",
+        comment="Faltó la cita",
+        answer_status="insufficient",
+    )
+
+
+async def test_feedback_is_unique_per_actor_and_listed_newest_first_across_partitions(store):
+    oldest, middle, newest = feedback("ana", 0, 3), feedback("anonymous", 0, 2), feedback("bruno", 1, 1)
+    for item in (middle, oldest, newest):
+        await store.create_feedback(item)
+    await store.audit(actor="ana", event="access_decision", data={"access_request_id": "ar-1"})
+
+    with pytest.raises(FeedbackExists):
+        await store.create_feedback(oldest.model_copy(update={"rating": "up"}))
+
+    assert await store.list_feedback(50) == [newest, middle, oldest]
+    assert await store.list_feedback(2) == [newest, middle]

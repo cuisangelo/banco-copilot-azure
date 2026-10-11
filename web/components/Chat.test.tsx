@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { ApiError, createDemoSession, resumeSession, streamChat } from "@/lib/api";
+import { ApiError, createDemoSession, resumeSession, sendFeedback, streamChat } from "@/lib/api";
 import type { ChatEvent } from "@/lib/api";
 import { SessionProvider } from "@/lib/session";
 import type { AccessRequest, ChatAnswer } from "@/lib/types";
@@ -13,6 +13,7 @@ vi.mock("@/lib/api", async (importOriginal) => ({
   createDemoSession: vi.fn(),
   streamChat: vi.fn(),
   resumeSession: vi.fn(),
+  sendFeedback: vi.fn(),
 }));
 
 // The card's own polling is covered in AccessRequestCard.test; here only the hand-off to resume matters.
@@ -170,5 +171,27 @@ describe("Chat", () => {
     await userEvent.click(await screen.findByRole("button", { name: "simular aprobación" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("No hay nada que reanudar");
+  });
+
+  it("rates each answer by its position in the session", async () => {
+    vi.mocked(sendFeedback).mockResolvedValue({ id: "f-1" });
+    vi.mocked(streamChat)
+      .mockReturnValueOnce(events({ type: "answer", payload: answer({ message: "Primera." }) }))
+      .mockReturnValueOnce(events({ type: "answer", payload: answer({ status: "insufficient", message: "Segunda." }) }));
+    renderChat();
+    await signInAsAna();
+    await ask("uno");
+    await screen.findByText("Primera.");
+    await ask("dos");
+    await screen.findByText("Segunda.");
+
+    const [, second] = screen.getAllByRole("button", { name: "Respuesta útil" });
+    await userEvent.click(second);
+
+    const sessionId = vi.mocked(streamChat).mock.calls[0][0].session_id;
+    expect(sendFeedback).toHaveBeenCalledWith(
+      { session_id: sessionId, turn_index: 1, rating: "up", comment: null, answer_status: "insufficient" },
+      "tok-ana",
+    );
   });
 });

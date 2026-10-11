@@ -8,6 +8,8 @@ import type {
   DemoSession,
   ErrorEvent,
   EscalationDecision,
+  Feedback,
+  FeedbackCreate,
   PersonaKey,
   TraceEvent,
 } from "./types";
@@ -91,4 +93,12 @@ export function decideEscalation(
   token: string | null,
 ): Promise<{ ticket_id: string } | { discarded: true }> {
   return postJson(`/escalations/${id}/decision`, decision, token);
+}
+
+export function sendFeedback(feedback: FeedbackCreate, token: string | null): Promise<{ id: string }> {
+  return postJson("/feedback", feedback, token);
+}
+
+export async function listFeedback(token: string): Promise<Feedback[]> {
+  return (await request("/feedback?limit=50", { headers: auth(token) })).json();
 }

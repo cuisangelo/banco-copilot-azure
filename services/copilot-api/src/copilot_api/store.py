@@ -22,6 +22,7 @@ from bank_contracts.models import (
     CustomerProfile,
     EscalationDecision,
     EscalationDraft,
+    Feedback,
     Product,
 )
 from pydantic import BaseModel
@@ -56,6 +57,10 @@ class AlreadyDecided(Exception):
     pass
 
 
+class FeedbackExists(Exception):
+    pass
+
+
 class InMemoryStore:
     """Process-local store with the same interface as CosmosStore, for tests and local runs."""
 
@@ -65,6 +70,7 @@ class InMemoryStore:
         self._access_requests: dict[str, AccessRequest] = {}
         self._sessions: dict[str, SessionRecord] = {}
         self._checkpoints: dict[str, InMemoryCheckpointStorage] = {}
+        self._feedback: dict[str, Feedback] = {}
 
     async def audit(self, *, actor: str | None, event: str, data: dict) -> None:
         self.audit_log.append({"actor": actor or "anonymous", "event": event, **data})
@@ -104,6 +110,14 @@ class InMemoryStore:
 
     def checkpoint_storage(self, session_id: str) -> CheckpointStorage:
         return self._checkpoints.setdefault(session_id, InMemoryCheckpointStorage())
+
+    async def create_feedback(self, feedback: Feedback) -> None:
+        if feedback.id in self._feedback:
+            raise FeedbackExists(feedback.id)
+        self._feedback[feedback.id] = feedback
+
+    async def list_feedback(self, limit: int) -> list[Feedback]:
+        return sorted(self._feedback.values(), key=lambda feedback: feedback.created_at, reverse=True)[:limit]
 
 
 CHECKPOINT_TYPES: frozenset[str] = frozenset(
@@ -275,3 +289,17 @@ class CosmosStore:
 
     def checkpoint_storage(self, session_id: str) -> CheckpointStorage:
         return CosmosCheckpointStorage(self._checkpoints, session_id)
+
+    async def create_feedback(self, feedback: Feedback) -> None:
+        """The id is deterministic per actor and turn, so Cosmos itself rejects a second rating."""
+        try:
+            await self._audit.create_item({"event": "feedback", **feedback.model_dump(mode="json")})
+        except CosmosResourceExistsError as error:
+            raise FeedbackExists(feedback.id) from error
+
+    async def list_feedback(self, limit: int) -> list[Feedback]:
+        items = self._audit.query_items(
+            "SELECT TOP @limit * FROM c WHERE c.event = 'feedback' ORDER BY c.created_at DESC",
+            parameters=[{"name": "@limit", "value": limit}],
+        )
+        return [Feedback.model_validate(item) async for item in items]
