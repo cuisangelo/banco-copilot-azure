@@ -1,9 +1,15 @@
+from __future__ import annotations
+
 from dataclasses import dataclass, field
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from bank_contracts.models import ChatAnswer
 
 from copilot_api.workflow.llm import Llm
+
+if TYPE_CHECKING:
+    from copilot_api.workflow.rag import Chunk
+    from copilot_api.workflow.router import RouteDecision
 
 
 @dataclass
@@ -22,6 +28,8 @@ class Turn:
     customer_id: str | None
     actor: str | None
     history: list[HistoryEntry]
+    route: RouteDecision | None = None
+    chunks: list[Chunk] = field(default_factory=list)
 
 
 @dataclass
@@ -42,9 +50,13 @@ class AuditLog(Protocol):
     async def audit(self, *, actor: str | None, event: str, data: dict) -> None: ...
 
 
+class Retriever(Protocol):
+    async def search(self, query: str, *, top: int) -> list[Chunk]: ...
+
+
 @dataclass
 class Services:
     llm: Llm
     safety: Safety
     store: AuditLog
-
+    retriever: Retriever

@@ -43,3 +43,13 @@ class FakeSafety:
 
     async def ungrounded(self, text: str, sources: list[str]) -> bool:
         return self._ungrounded
+
+
+class FakeRetriever:
+    def __init__(self, chunks):
+        self.chunks = chunks
+        self.queries: list[str] = []
+
+    async def search(self, query: str, *, top: int):
+        self.queries.append(query)
+        return self.chunks[:top]
