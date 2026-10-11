@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Protocol
 from bank_contracts.models import (
     AccessRequest,
     ChatAnswer,
+    Citation,
     CustomerFields,
     CustomerProfile,
     FieldsDenied,
@@ -16,6 +17,7 @@ from bank_contracts.models import (
 from copilot_api.workflow.llm import Llm
 
 if TYPE_CHECKING:
+    from copilot_api.workflow.composer import ComposerOutput
     from copilot_api.workflow.customer import CustomerPlan
     from copilot_api.workflow.rag import Chunk
     from copilot_api.workflow.router import RouteDecision
@@ -46,6 +48,8 @@ class Turn:
     unauthorized_fields: list[Level2Field] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
     tool_calls: int = 0
+    citations: list[Citation] = field(default_factory=list)
+    composed: ComposerOutput | None = None
 
 
 MAX_TOOL_CALLS = 5
@@ -57,6 +61,13 @@ def take_tool_call(turn: Turn) -> bool:
         return False
     turn.tool_calls += 1
     return True
+
+
+def level2_values(turn: Turn) -> list[str]:
+    """The level-2 values this turn read, so callers can keep them out of history and telemetry."""
+    if turn.customer_fields is None:
+        return []
+    return [str(value) for value in turn.customer_fields.values.values()]
 
 
 @dataclass

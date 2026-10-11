@@ -1,10 +1,12 @@
 import pytest
 from agent_framework import InMemoryCheckpointStorage
+from bank_contracts.models import EscalationDecision
 from pydantic import ValidationError
 
 from copilot_api.store import InMemoryStore
-from copilot_api.workflow.graph import build_workflow
+from copilot_api.workflow.composer import ComposerOutput, DraftClaim
 from copilot_api.workflow.customer import CustomerPlan
+from copilot_api.workflow.graph import build_workflow
 from copilot_api.workflow.llm import Llm
 from copilot_api.workflow.products import ProductCall, ProductPlan
 from copilot_api.workflow.rag import Chunk
@@ -149,10 +151,128 @@ async def test_customer_data_needs_a_persona():
     assert bank.calls == []
 
 
+FICHA = chunk("ficha-hipotecario-1", "Antigüedad laboral mínima: 12 meses con el mismo empleador.")
+CIRCULAR = chunk("circular-2026-07-0", "Desde julio, la antigüedad laboral mínima para hipotecario es de 24 meses.")
+
+
+def composed(*claims: DraftClaim, steps: tuple[DraftClaim, ...] = ()) -> ComposerOutput:
+    return ComposerOutput(message="Esto es lo que encontré.", requirements=list(claims), steps=list(steps))
+
+
+async def test_cited_answer_is_ok_with_its_sources():
+    services = make_services(
+        llm=scripted(route("procedure"), composed(DraftClaim(text="12 meses de antigüedad laboral", citation_ids=["S1"]))),
+        retriever=FakeRetriever([FICHA]),
+    )
+
+    answer = answer_of(await run_turn(services, "¿antigüedad laboral para el hipotecario?"))
+
+    assert answer.status == "ok"
+    assert [claim.citation_ids for claim in answer.requirements] == [["S1"]]
+    assert [(c.id, c.kind, c.ref) for c in answer.citations] == [("S1", "doc", "ficha-hipotecario §Requisitos")]
+
+
+async def test_claim_citing_an_unknown_source_is_insufficient():
+    services = make_services(
+        llm=scripted(route("procedure"), composed(DraftClaim(text="Se exige aval", citation_ids=["S9"]))),
+        retriever=FakeRetriever([FICHA]),
+    )
+
+    answer = answer_of(await run_turn(services, "¿antigüedad laboral para el hipotecario?"))
+
+    assert answer.status == "insufficient"
+    assert answer.requirements == []
+    assert answer.escalation is not None
+
+
+async def test_claim_without_citation_is_insufficient():
+    services = make_services(
+        llm=scripted(route("procedure"), composed(DraftClaim(text="Se exige aval", citation_ids=[]))),
+        retriever=FakeRetriever([FICHA]),
+    )
+
+    assert answer_of(await run_turn(services, "¿requisitos?")).status == "insufficient"
+
+
+async def test_ungrounded_answer_is_insufficient():
+    services = make_services(
+        llm=scripted(route("procedure"), composed(DraftClaim(text="12 meses", citation_ids=["S1"]))),
+        retriever=FakeRetriever([FICHA]),
+        safety=FakeSafety(ungrounded=True),
+    )
+
+    assert answer_of(await run_turn(services, "¿antigüedad laboral?")).status == "insufficient"
+
+
+async def test_circular_and_mortgage_sheet_disagreeing_is_a_contradiction():
+    output = composed(
+        DraftClaim(text="Ficha: 12 meses", citation_ids=["S1"], attribute="antigüedad laboral mínima", value="12 meses"),
+        DraftClaim(text="Circular: 24 meses", citation_ids=["S2"], attribute="Antigüedad laboral mínima ", value="24 meses"),
+    )
+    services = make_services(llm=scripted(route("procedure"), output), retriever=FakeRetriever([FICHA, CIRCULAR]))
+
+    events = await run_turn(services, "¿antigüedad laboral mínima para el hipotecario?")
+
+    answer = answer_of(events)
+    assert answer.status == "contradiction"
+    assert {citation.ref for citation in answer.escalation.evidence} == {
+        "ficha-hipotecario §Requisitos",
+        "circular-2026-07 §Requisitos",
+    }
+    assert [event.request_id for event in events if event.type == "request_info"] == [answer.escalation.id]
+
+
+async def test_same_value_from_two_sources_is_not_a_contradiction():
+    output = composed(
+        DraftClaim(text="12 meses", citation_ids=["S1"], attribute="antigüedad laboral mínima", value="12 meses"),
+        DraftClaim(text="12 meses", citation_ids=["S2"], attribute="antigüedad laboral mínima", value="12 meses"),
+    )
+    services = make_services(llm=scripted(route("procedure"), output), retriever=FakeRetriever([FICHA, CIRCULAR]))
+
+    assert answer_of(await run_turn(services, "¿antigüedad?")).status == "ok"
+
+
+async def test_approved_escalation_creates_an_audited_ticket():
+    store = InMemoryStore()
+    services = make_services(
+        llm=scripted(route("procedure"), composed(DraftClaim(text="Se exige aval", citation_ids=[]))),
+        retriever=FakeRetriever([FICHA]),
+        store=store,
+    )
+    storage = InMemoryCheckpointStorage()
+    workflow = build_workflow(services, storage)
+    turn = Turn(session_id="s-1", message="¿requisitos?", customer_id=None, actor="ana", history=[])
+    draft = answer_of([event async for event in workflow.run(turn, stream=True)]).escalation
+
+    resumed = build_workflow(services, storage)
+    outcomes = [
+        event.data
+        async for event in resumed.run(
+            responses={draft.id: EscalationDecision(approve=True)},
+            checkpoint_id=workflow.get_last_checkpoint_id(),
+            stream=True,
+        )
+        if event.type == "output"
+    ]
+
+    assert len(outcomes) == 1 and outcomes[0].ticket_id.startswith("TCK-")
+    assert store.audit_log[-1] == {
+        "actor": "ana",
+        "event": "escalation_decision",
+        "session_id": "s-1",
+        "escalation_id": draft.id,
+        "approved": True,
+        "ticket_id": outcomes[0].ticket_id,
+    }
+
+
 async def test_tool_calls_are_capped_at_five_per_turn():
     bank = FakeBank()
     plan = ProductPlan(calls=[ProductCall(tool="get_product", product_id="TC-ORO")] * 7)
-    services = make_services(llm=scripted(route("product"), plan), bank=bank)
+    services = make_services(
+        llm=scripted(route("product"), plan, composed(DraftClaim(text="Mantención $4.500", citation_ids=["S1"]))),
+        bank=bank,
+    )
 
     await run_turn(services, "¿mantención de la tarjeta Oro?")
 

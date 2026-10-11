@@ -7,8 +7,9 @@ from azure.search.documents.models import VectorizedQuery
 from bank_contracts.models import ChatAnswer
 from pydantic import BaseModel
 
+from copilot_api.workflow.escalation import ESCALATION_EXECUTOR_ID, EscalationCase
 from copilot_api.workflow.trace import emit_trace
-from copilot_api.workflow.turn import Services, Turn, TurnResult
+from copilot_api.workflow.turn import Services, Turn
 
 TOP_K = 5
 RERANKER_THRESHOLD = 1.5
@@ -63,9 +64,9 @@ class Rag(Executor):
         self._threshold = threshold
 
     @handler
-    async def run(self, turn: Turn, ctx: WorkflowContext[Turn, TurnResult]) -> None:
+    async def run(self, turn: Turn, ctx: WorkflowContext[Turn | EscalationCase]) -> None:
         if turn.route.route not in DOC_ROUTES:
-            await ctx.send_message(turn)
+            await ctx.send_message(turn, target_id="product_agent")
             return
         started = time.perf_counter()
         found = await self._services.retriever.search(turn.route.search_query, top=TOP_K)
@@ -94,6 +95,10 @@ class Rag(Executor):
             },
         )
         if not turn.chunks and turn.route.route == "procedure":
-            await ctx.yield_output(TurnResult(ChatAnswer(status="insufficient", message=NOT_FOUND_MESSAGE)))
+            answer = ChatAnswer(status="insufficient", message=NOT_FOUND_MESSAGE)
+            await ctx.send_message(
+                EscalationCase(turn, answer, reason="no está en la documentación vigente"),
+                target_id=ESCALATION_EXECUTOR_ID,
+            )
             return
-        await ctx.send_message(turn)
+        await ctx.send_message(turn, target_id="product_agent")
