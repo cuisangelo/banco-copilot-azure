@@ -1,4 +1,4 @@
-import { act, render, screen } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createDemoSession } from "@/lib/api";
@@ -7,10 +7,8 @@ import { PersonaPicker } from "./PersonaPicker";
 
 vi.mock("@/lib/api", () => ({ createDemoSession: vi.fn() }));
 
-let expire: () => void;
 function ExpireHandle() {
-  expire = useSession().expire;
-  return null;
+  return <button onClick={useSession().expire}>simular 401</button>;
 }
 
 function renderPicker() {
@@ -57,7 +55,7 @@ describe("PersonaPicker", () => {
     await userEvent.click(screen.getByRole("button", { name: /persona/i }));
     await userEvent.click(screen.getByRole("option", { name: /Ana/ }));
 
-    act(() => expire());
+    await userEvent.click(screen.getByRole("button", { name: "simular 401" }));
 
     expect(screen.getByRole("alert")).toHaveTextContent(/venció/);
     expect(screen.getByRole("listbox")).toBeVisible();

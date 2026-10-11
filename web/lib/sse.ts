@@ -4,7 +4,8 @@ export interface SSEMessage {
 }
 
 export async function* parseSSE(stream: ReadableStream<Uint8Array>): AsyncGenerator<SSEMessage> {
-  const reader = stream.pipeThrough(new TextDecoderStream()).getReader();
+  const reader = stream.getReader();
+  const decoder = new TextDecoder();
   let buffer = "";
   let event = "message";
   let data: string[] = [];
@@ -12,7 +13,7 @@ export async function* parseSSE(stream: ReadableStream<Uint8Array>): AsyncGenera
   while (true) {
     const { value, done } = await reader.read();
     if (done) return;
-    buffer += value;
+    buffer += decoder.decode(value, { stream: true });
     const lines = buffer.split(/\r?\n/);
     buffer = lines.pop()!;
     for (const line of lines) {

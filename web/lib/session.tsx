@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState } from "react";
+import { createContext, useCallback, useContext, useState } from "react";
 import { createDemoSession } from "./api";
 import type { PersonaKey, Role } from "./types";
 
@@ -46,11 +46,12 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     setSession(null);
   }
 
-  function expire() {
+  // Stable identity: consumers list it as an effect dependency.
+  const expire = useCallback(() => {
     setSession(null);
     setNotice("Tu sesión de demo venció. Elige una persona para continuar.");
     setPickerOpen(true);
-  }
+  }, []);
 
   return (
     <SessionContext.Provider value={{ session, notice, pickerOpen, setPickerOpen, signIn, signOut, expire }}>
