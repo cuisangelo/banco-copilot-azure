@@ -63,6 +63,11 @@ uv export --package bank-ingest --no-hashes --no-editable --no-emit-project --fr
 uv pip install --target "$pkg/.python_packages/lib/site-packages" --python-version 3.12 \
   --python-platform x86_64-manylinux_2_28 -r "$pkg/requirements.txt"
 (cd "$pkg" && zip -qr "$pkg.zip" .)
+# azurerm injects a key-based AzureWebJobsStorage connection string next to the identity-based
+# AzureWebJobsStorage__* settings. The host prefers it and fails with 403 because shared keys are
+# disabled on the account, so it never writes the keys Event Grid needs.
+az functionapp config appsettings delete --resource-group "$rg" --name "$(out ingest_function_name)" \
+  --setting-names AzureWebJobsStorage --output none
 az functionapp deployment source config-zip --resource-group "$rg" --name "$(out ingest_function_name)" \
   --src "$pkg.zip" --build-remote false --output none
 
