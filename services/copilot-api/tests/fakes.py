@@ -1,11 +1,14 @@
 import json
 from collections.abc import Callable
+from contextlib import asynccontextmanager
 from typing import Any
 
+import jwt
 from agent_framework import ChatResponse, Message
-from bank_contracts.models import CustomerFields, CustomerProfile, FieldsDenied, Product
+from bank_contracts.models import AccessRequest, CustomerFields, CustomerProfile, FieldsDenied, Product
 from pydantic import BaseModel
 
+from copilot_api.grants import GrantConflict
 from copilot_api.mcp_bank import ToolFailed
 
 
@@ -113,6 +116,33 @@ class FakeBank:
             values={field: LEVEL2_VALUES[customer_id][field] for field in fields},
             grant_id=f"g-{customer_id}",
         )
+
+
+def fake_connect(bank: FakeBank):
+    """connect_bank stand-in: binds the fake to the persona in the token, as customers-api would."""
+
+    @asynccontextmanager
+    async def connect(token: str | None):
+        bank.actor = jwt.decode(token, options={"verify_signature": False})["sub"] if token else None
+        yield bank
+
+    return connect
+
+
+class FakeGrants:
+    """customers-api POST /grants stand-in that also makes the grant visible to FakeBank."""
+
+    def __init__(self, bank: FakeBank) -> None:
+        self._bank = bank
+        self.created: list[tuple[str, str]] = []
+
+    async def create(self, request: AccessRequest, token: str) -> None:
+        if any(request_id == request.id for request_id, _ in self.created):
+            raise GrantConflict(request.id)
+        approver = jwt.decode(token, options={"verify_signature": False})["sub"]
+        self.created.append((request.id, approver))
+        key = (request.requested_by, request.customer_id)
+        self._bank.grants[key] = self._bank.grants.get(key, set()) | set(request.approved_fields)
 
 
 class FakeRetriever:

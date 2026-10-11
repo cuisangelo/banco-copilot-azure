@@ -3,8 +3,9 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi.testclient import TestClient
 
-from copilot_api.main import Deps, create_app
+from copilot_api.main import create_app
 from copilot_api.personas import PersonaIssuer
+from wiring import make_deps
 
 
 @pytest.fixture(scope="session")
@@ -23,10 +24,5 @@ def personas(private_key_pem) -> PersonaIssuer:
 
 
 @pytest.fixture
-def deps(personas) -> Deps:
-    return Deps(personas=personas)
-
-
-@pytest.fixture
-def client(deps) -> TestClient:
-    return TestClient(create_app(deps))
+def client(personas) -> TestClient:
+    return TestClient(create_app(make_deps(personas)))

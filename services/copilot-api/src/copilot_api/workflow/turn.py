@@ -13,6 +13,7 @@ from bank_contracts.models import (
     Level2Field,
     Product,
 )
+from pydantic import BaseModel
 
 from copilot_api.workflow.llm import Llm
 
@@ -23,8 +24,7 @@ if TYPE_CHECKING:
     from copilot_api.workflow.router import RouteDecision
 
 
-@dataclass
-class HistoryEntry:
+class HistoryEntry(BaseModel):
     """One prior exchange of the session, already stripped of level-2 values."""
 
     question: str
