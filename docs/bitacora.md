@@ -92,6 +92,16 @@ herramientas. Cuando una hora es aproximada se marca con `~`.
 | ~23:25 | **Evaluación 4:** **26/40 (65 %)**, **0 fugas**, groundedness 4,95/5, similarity 4,21/5, **USD 0,05** las 40 preguntas. Seguridad 15/15. |
 | ~23:30 | e20 a e22 reproducidos de forma aislada: **funcionan**. El error de transporte venía del rate limit en el runner, que espaciaba solo los streams. |
 
+## 4b. Mejoras pedidas tras la cobertura (~23:40 →)
+
+| Hora | Qué pasó |
+|---|---|
+| ~23:40 | Matriz de cobertura: 39 ✅ / 10 ⚠️ / 10 ❌ (`0c55eec`). El usuario aprueba 5 mejoras: GitHub público + CI, evaluaciones en Foundry, feedback humano, notebook y agentic retrieval. |
+| ~23:45 | Diagrama de arquitectura cloud clicable con íconos oficiales de Azure (V24) publicado en `/documentacion`; la protección sigue verificada (302). |
+| ~23:50 | Tres sesiones en paralelo: `human-feedback`, `copilot-quality` (incluye el patrón concurrente y agentic retrieval) y `evals-foundry` (incluye el notebook). |
+| ~23:55 | **Decisión del usuario:** repo **público**, con el inventario de `/documentacion` fuera del código. Auditoría: el ID de suscripción, el dominio del tenant y los nombres solo aparecen en `web/app/documentacion/*` desde `800bed5`. El escaneo de secretos del historial completo sale limpio (sin llaves, tokens, SAS ni correos). El historial se limpia al final, cuando terminen las sesiones. |
+| ~00:00 | El usuario pide usar "luna 6". El catálogo de Canada East tiene `gpt-6-luna` (2026-09-22, GA, chat y Responses), pero la **cuota de la Free Trial es 0 en todas las regiones** (también para `gpt-5.6-luna`). No hay precio publicado para `gpt-6-luna`. **Decisión del usuario:** seguir con gpt-4.1-mini. |
+
 ## 5. Lecciones
 
 - **Una afirmación se gana ejecutando.** La documentación de Azure decía que groundedness existía en Canada East y que la Free Trial tenía cuotas; solo la llamada real lo resolvió, en un sentido y en el otro.
