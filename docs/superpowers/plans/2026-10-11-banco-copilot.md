@@ -343,6 +343,8 @@ Configuración semántica `default`: título `doc_title` y contenido `content`.
 | functions/ingest | `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_EMBEDDING_DEPLOYMENT`, `AZURE_OPENAI_API_VERSION`, `SEARCH_ENDPOINT`, `SEARCH_INDEX` |
 | web | `NEXT_PUBLIC_API_BASE_URL` (se fija en el build) |
 
+Además, en Azure, todo servicio que use `DefaultAzureCredential` con una UAMI recibe `AZURE_CLIENT_ID`. `products-api` y `customers-api` traen sus datos en la imagen: `PRODUCTS_PATH=/app/data/products.json` y `CUSTOMERS_PATH=/app/data/customers.json`. Los servicios escuchan en el puerto 8000, se construyen desde la raíz con `docker build -f services/<svc>/Dockerfile .`, y `MCP_BANK_URL` termina en `/mcp`.
+
 Contenedores de Cosmos (base `copilot`):
 
 | Contenedor | Partition key | TTL |
