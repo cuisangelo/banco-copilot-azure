@@ -7,7 +7,8 @@ import { LockIcon } from "@/components/icons";
 import { FIELD_LABEL, NODE_LABEL } from "@/lib/labels";
 import { GRANT_MINUTES, LEVEL2_FIELDS } from "@/lib/types";
 import { ArchitectureDiagram } from "./ArchitectureDiagram";
-import { REGION_LABEL, RESOURCES, RESOURCE_GROUP_URL, portalUrl } from "./azure";
+import { portalUrl } from "./azure";
+import { loadDeployment } from "./inventory";
 
 export const metadata: Metadata = {
   title: "Documentación · Banco Austral",
@@ -165,6 +166,7 @@ const Code = ({ children }: { children: React.ReactNode }) => (
 );
 
 export default function DocumentationPage() {
+  const deployment = loadDeployment();
   return (
     <main className="relative min-h-0 flex-1 overflow-y-auto">
       <div className="mx-auto max-w-[1200px] px-4 pb-20 sm:px-6">
@@ -217,7 +219,7 @@ export default function DocumentationPage() {
               Desliza para ver el diagrama completo.
             </p>
             <div className="overflow-x-auto p-3 sm:p-4" tabIndex={0} aria-label="Diagrama de arquitectura, desplazable">
-              <ArchitectureDiagram />
+              <ArchitectureDiagram deployment={deployment} />
             </div>
             <figcaption className="grid gap-6 border-t border-line px-5 py-5 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
               <Legend label="Flujo principal" steps={FLOW} />
@@ -340,16 +342,16 @@ export default function DocumentationPage() {
         <Section
           id="recursos"
           title="Recursos desplegados"
-          lead="Todo vive en el grupo de recursos bcopilot-rg y se crea con Terraform."
+          lead={`Todo vive en el grupo de recursos ${deployment.resourceGroup} y se crea con Terraform.`}
         >
           <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-2">
             <a
-              href={`${RESOURCE_GROUP_URL}/overview`}
+              href={`${deployment.resourceGroupUrl}/overview`}
               target="_blank"
               rel="noopener noreferrer"
               className="rounded-full bg-navy px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand"
             >
-              Grupo de recursos bcopilot-rg
+              Grupo de recursos {deployment.resourceGroup}
             </a>
             <p className="flex items-center gap-1.5 text-sm text-muted">
               <LockIcon className="size-4 shrink-0" />
@@ -360,7 +362,7 @@ export default function DocumentationPage() {
             aria-label="Recursos desplegados"
             className="divide-y divide-line overflow-hidden rounded-2xl bg-white shadow-soft ring-1 ring-line"
           >
-            {RESOURCES.map((r) => (
+            {deployment.resources.map((r) => (
               <li
                 key={r.name}
                 className="grid gap-x-6 gap-y-2 px-5 py-4 lg:grid-cols-[minmax(0,17rem)_minmax(0,1fr)_auto] lg:items-center"
@@ -368,12 +370,12 @@ export default function DocumentationPage() {
                 <div className="min-w-0">
                   <h3 className="font-mono text-[0.95rem] font-semibold break-all text-navy">{r.name}</h3>
                   <p className="mt-0.5 text-sm text-muted">
-                    {r.service}, {REGION_LABEL[r.region]}
+                    {r.service}, {r.regionLabel}
                   </p>
                 </div>
                 <p className="text-[0.95rem] leading-relaxed text-ink">{r.role}</p>
                 <a
-                  href={portalUrl(r.type, r.name)}
+                  href={portalUrl(deployment, r)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="justify-self-start rounded-full px-4 py-2 text-sm font-semibold whitespace-nowrap text-brand ring-1 ring-brand/30 transition-colors hover:bg-sky"
