@@ -22,6 +22,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from opentelemetry import trace
 from pydantic import BaseModel
 
 from copilot_api.grants import GrantConflict, GrantsClient
@@ -36,6 +37,7 @@ from copilot_api.workflow.trace import TRACE_EVENT_TYPE
 from copilot_api.workflow.turn import BankTools, HistoryEntry, Retriever, Safety, Services, Turn, TurnResult
 
 logger = logging.getLogger(__name__)
+tracer = trace.get_tracer(__name__)
 
 PersonaKey = Literal[tuple(PERSONAS)]
 HISTORY_TURNS = 10
@@ -308,11 +310,13 @@ def create_app(deps: Deps) -> FastAPI:
             await deps.store.decide_access_request(decided)
         except (GrantConflict, AlreadyDecided) as error:
             raise HTTPException(409, "La solicitud ya fue decidida.") from error
-        await deps.store.audit(
-            actor=who.sub,
-            event="access_decision",
-            data={"access_request_id": request_id, "status": status, "approved_fields": approved},
-        )
+        with tracer.start_as_current_span("access_request.decision") as span:
+            span.set_attribute("access_request.status", status)
+            await deps.store.audit(
+                actor=who.sub,
+                event="access_decision",
+                data={"access_request_id": request_id, "status": status, "approved_fields": approved},
+            )
         return decided
 
     return app

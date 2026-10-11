@@ -12,7 +12,7 @@ from copilot_api.workflow.composer import ComposerOutput, DraftClaim
 from copilot_api.workflow.customer import CustomerPlan
 from copilot_api.workflow.products import ProductCall, ProductPlan
 from copilot_api.workflow.router import RouteDecision
-from fakes import FakeChatClient, FakeRetriever
+from fakes import FakeChatClient, FakeRetriever, FakeSafety
 from test_mcp_bank import build_server
 from test_workflow import CIRCULAR, FICHA
 from wiring import make_deps
@@ -91,6 +91,62 @@ async def test_chat_streams_traces_then_a_single_answer(api):
     assert answer(events)["status"] == "ok"
     assert {name for name, _ in events[:-1]} == {"trace"}
     assert [data["node"] for name, data in events if name == "trace"][:2] == ["input_guard", "router"]
+
+
+def traces(events) -> dict[str, dict]:
+    return {data["node"]: data for name, data in events if name == "trace"}
+
+
+async def test_trace_events_carry_cost_chunks_and_guardrails(api):
+    client = FakeChatClient({
+        RouteDecision: RouteDecision(route="procedure", search_query="antigüedad hipotecario"),
+        ComposerOutput: ComposerOutput(
+            message="Se exigen 12 meses.", requirements=[DraftClaim(text="12 meses", citation_ids=["S1"])], steps=[]
+        ),
+    })
+    app = api(chat_client=client, retriever=FakeRetriever([FICHA]), safety=FakeSafety(ungrounded=True))
+
+    nodes = traces(await app.chat("¿antigüedad laboral para el hipotecario?"))
+
+    assert nodes["router"]["cost_usd"] == pytest.approx(1000 * 0.40 / 1e6 + 200 * 1.60 / 1e6)
+    assert nodes["router"]["data"] == {"route": "procedure"}
+    assert nodes["rag_agent"]["data"]["chunks"] == [
+        {"id": FICHA.id, "doc_id": FICHA.doc_id, "section": FICHA.section, "score": FICHA.reranker_score, "content": FICHA.content}
+    ]
+    assert nodes["verifier"]["data"]["guardrail"] == "groundedness"
+    assert "guardrail" not in nodes["input_guard"]["data"]
+
+
+async def test_customer_trace_reports_the_denial_without_values(api):
+    app = api(chat_client=customer_script(["monthly_income"]))
+
+    events = await app.chat("¿Renta de C-1001?", "ana", "C-1001")
+
+    customer = traces(events)["customer_agent"]["data"]
+    assert customer["authz.decision"] == "denied"
+    assert customer["tool_calls"] == [
+        {"tool": "get_customer_profile", "arguments": {"customer_id": "C-1001"}, "result_kind": "ok"},
+        {
+            "tool": "get_customer_fields",
+            "arguments": {"customer_id": "C-1001", "fields": ["monthly_income"]},
+            "result_kind": "denied",
+        },
+    ]
+    assert INCOME not in json.dumps([data for name, data in events if name == "trace"])
+
+
+async def test_rut_typed_by_the_advisor_is_still_answered(api):
+    client = FakeChatClient({
+        RouteDecision: RouteDecision(route="procedure", search_query="bloqueo de tarjeta"),
+        ComposerOutput: ComposerOutput(
+            message="Bloquéala desde el canal.", requirements=[], steps=[DraftClaim(text="Llamar", citation_ids=["S1"])]
+        ),
+    })
+    app = api(chat_client=client, retriever=FakeRetriever([FICHA]))
+
+    events = await app.chat("Cliente 12.345.678-9 con tarjeta 4111111111111111 quiere bloquearla")
+
+    assert answer(events)["status"] == "ok"
 
 
 async def test_eleventh_request_in_a_minute_is_rate_limited(api):

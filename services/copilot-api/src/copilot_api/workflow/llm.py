@@ -4,6 +4,8 @@ from typing import Any, TypeVar
 from agent_framework import Message, SupportsChatGetResponse
 from pydantic import BaseModel
 
+from copilot_api.pricing import cost_usd
+
 T = TypeVar("T", bound=BaseModel)
 
 
@@ -11,6 +13,7 @@ T = TypeVar("T", bound=BaseModel)
 class Usage:
     tokens_in: int
     tokens_out: int
+    cost_usd: float
 
 
 class Llm:
@@ -26,4 +29,5 @@ class Llm:
             options={"response_format": schema, "temperature": 0},
         )
         usage = response.usage_details
-        return response.value, Usage(usage["input_token_count"], usage["output_token_count"])
+        tokens_in, tokens_out = usage["input_token_count"], usage["output_token_count"]
+        return response.value, Usage(tokens_in, tokens_out, cost_usd(self.model, tokens_in, tokens_out))

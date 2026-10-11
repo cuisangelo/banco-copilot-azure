@@ -68,7 +68,8 @@ class Verifier(Executor):
             ctx,
             "verifier",
             started,
-            {"layer": "groundedness", "ungrounded": ungrounded, "uncited_claims": len(uncited), "contradiction": conflict},
+            {"uncited_claims": len(uncited), "contradiction": conflict}
+            | ({"guardrail": "groundedness"} if ungrounded else {}),
         )
         if ungrounded or uncited:
             answer = ChatAnswer(status="insufficient", message=UNSUPPORTED_MESSAGE + _caveats(turn))

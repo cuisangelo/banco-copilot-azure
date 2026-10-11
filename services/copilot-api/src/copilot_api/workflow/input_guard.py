@@ -18,7 +18,7 @@ class InputGuard(Executor):
     async def run(self, turn: Turn, ctx: WorkflowContext[Turn, TurnResult]) -> None:
         started = time.perf_counter()
         attack = await self._services.safety.user_attack(turn.message)
-        await emit_trace(ctx, "input_guard", started, {"layer": "prompt_shields_user", "attack_detected": attack})
+        await emit_trace(ctx, "input_guard", started, {"guardrail": "prompt_shields_user"} if attack else {})
         if attack:
             await self._services.store.audit(
                 actor=turn.actor,

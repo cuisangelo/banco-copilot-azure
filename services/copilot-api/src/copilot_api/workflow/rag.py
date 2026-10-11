@@ -89,10 +89,20 @@ class Rag(Executor):
             "rag_agent",
             started,
             {
-                "chunks": [{"id": chunk.id, "score": chunk.reranker_score} for chunk in found],
+                "chunks": [
+                    {
+                        "id": chunk.id,
+                        "doc_id": chunk.doc_id,
+                        "section": chunk.section,
+                        "score": chunk.reranker_score,
+                        "content": chunk.content,
+                    }
+                    for chunk in found
+                ],
                 "threshold": self._threshold,
-                "dropped_by_prompt_shields": dropped,
-            },
+                "dropped": dropped,
+            }
+            | ({"guardrail": "prompt_shields_documents"} if dropped else {}),
         )
         if not turn.chunks and turn.route.route == "procedure":
             answer = ChatAnswer(status="insufficient", message=NOT_FOUND_MESSAGE)

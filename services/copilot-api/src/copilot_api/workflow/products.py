@@ -53,7 +53,7 @@ class Products(Executor):
             if not take_tool_call(turn):
                 break
             arguments = call.model_dump(exclude={"tool"}, exclude_none=True)
-            executed.append({"tool": call.tool, "arguments": arguments})
+            executed.append({"tool": call.tool, "arguments": arguments, "result_kind": "ok"})
             await self._services.store.audit(
                 actor=turn.actor,
                 event="tool_call",
@@ -63,10 +63,11 @@ class Products(Executor):
                 found = await self._call(call)
             except (ToolFailed, ValidationError):
                 failed = True
+                executed[-1]["result_kind"] = "error"
                 continue
             known = {product.id for product in turn.products}
             turn.products.extend(product for product in found if product.id not in known)
         if failed:
             turn.notes.append(PRODUCTS_UNAVAILABLE)
-        await emit_trace(ctx, "product_agent", started, {"tool_calls": executed, "failed": failed}, usage)
+        await emit_trace(ctx, "product_agent", started, {"tool_calls": executed}, usage)
         await ctx.send_message(turn)
