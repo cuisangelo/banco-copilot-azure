@@ -22,7 +22,9 @@ describe("/documentacion", () => {
 
   it("draws the architecture and the workflow graph", () => {
     render(<DocumentationPage />);
-    expect(screen.getByRole("img", { name: /arquitectura/i })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: /arquitectura/i })).toBeInTheDocument();
+    expect(within(screen.getByRole("list", { name: "Flujo principal" })).getAllByRole("listitem").length).toBeGreaterThan(0);
+    expect(screen.getByText("Íconos: Microsoft Azure Architecture Icons")).toBeInTheDocument();
     const steps = within(screen.getByRole("list", { name: "Nodos del workflow" })).getAllByRole("listitem");
     expect(steps.map((s) => s.dataset.node)).toEqual([
       "input_guard",

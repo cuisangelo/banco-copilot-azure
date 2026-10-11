@@ -121,6 +121,45 @@ function Section({ id, title, lead, children }: { id: string; title: string; lea
   );
 }
 
+const FLOW = [
+  "El asesor o supervisor abre la app, servida por Static Web Apps.",
+  "El navegador envía la consulta a copilot-api por HTTPS/SSE, con el JWT de la persona demo.",
+  "Content Safety revisa la consulta y los documentos con Prompt Shields, y la respuesta con groundedness.",
+  "copilot-api busca en AI Search y redacta con Azure OpenAI.",
+  "Sesiones, checkpoints, solicitudes de acceso, permisos y auditoría quedan en Cosmos DB.",
+  "Las tools de productos y clientes van por MCP a mcp-bank, que no es accesible desde internet.",
+  "mcp-bank llama a API Management con la subscription key; APIM agrega X-Backend-Secret y customers-api valida el JWT y los permisos.",
+];
+
+const INGESTION = [
+  "Un documento nuevo en el contenedor docs emite un evento BlobCreated.",
+  "Event Grid dispara la Function de ingesta.",
+  "La Function divide por sección, genera embeddings e indexa en AI Search.",
+];
+
+function Legend({ label, steps, hollow = false }: { label: string; steps: string[]; hollow?: boolean }) {
+  return (
+    <div>
+      <h3 className="text-sm font-semibold text-navy">{label}</h3>
+      <ol aria-label={label} className="mt-2 space-y-1.5">
+        {steps.map((step, i) => (
+          <li key={step} className="flex gap-2.5 text-sm leading-snug text-ink">
+            <span
+              className={`flex size-5 shrink-0 items-center justify-center rounded-full text-[0.7rem] font-bold ring-[1.5px] ring-navy ${
+                hollow ? "bg-white text-navy" : "bg-navy text-white"
+              }`}
+              aria-hidden
+            >
+              {hollow ? String.fromCharCode(65 + i) : i + 1}
+            </span>
+            {step}
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
 const Code = ({ children }: { children: React.ReactNode }) => (
   <code className="rounded-md bg-sky px-1.5 py-0.5 font-mono text-[0.85em] text-navy">{children}</code>
 );
@@ -171,15 +210,19 @@ export default function DocumentationPage() {
         <Section
           id="arquitectura"
           title="Arquitectura"
-          lead="copilot-api es la única frontera pública. Los datos de clientes solo llegan a través de mcp-bank y API Management, con la identidad de la persona en el JWT."
+          lead="Cada ícono es un recurso desplegado: ábrelo para verlo en el portal de Azure. copilot-api es la única frontera pública; los datos de clientes solo llegan por mcp-bank y API Management, con la identidad de la persona en el JWT."
         >
-          <figure className="overflow-hidden rounded-3xl bg-navy shadow-lift">
-            <div className="overflow-x-auto p-3 sm:p-5" tabIndex={0} aria-label="Diagrama de arquitectura, desplazable">
+          <figure className="overflow-hidden rounded-3xl bg-white shadow-soft ring-1 ring-line">
+            <p className="border-b border-line px-5 py-2.5 text-sm text-muted xl:hidden">
+              Desliza para ver el diagrama completo.
+            </p>
+            <div className="overflow-x-auto p-3 sm:p-4" tabIndex={0} aria-label="Diagrama de arquitectura, desplazable">
               <ArchitectureDiagram />
             </div>
-            <figcaption className="border-t border-white/10 px-5 py-3 text-sm text-[#c9d6ee]">
-              <span className="lg:hidden">Desliza para ver el diagrama completo. </span>
-              Las etiquetas celestes marcan los recursos fuera de Canada East.
+            <figcaption className="grid gap-6 border-t border-line px-5 py-5 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+              <Legend label="Flujo principal" steps={FLOW} />
+              <Legend label="Ingesta" steps={INGESTION} hollow />
+              <p className="text-xs text-muted md:col-span-2">Íconos: Microsoft Azure Architecture Icons</p>
             </figcaption>
           </figure>
         </Section>
