@@ -94,6 +94,20 @@ export interface ErrorEvent {
   message: string;
 }
 
+export interface FeedbackCreate {
+  session_id: string;
+  turn_index: number;
+  rating: "up" | "down";
+  comment: string | null;
+  answer_status: ChatStatus;
+}
+
+export interface Feedback extends FeedbackCreate {
+  id: string;
+  actor: string;
+  created_at: string;
+}
+
 export interface DemoSession {
   token: string;
   name: string;

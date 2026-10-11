@@ -1,5 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ApiError, createDemoSession, decideAccessRequest, resumeSession, streamChat } from "./api";
+import {
+  ApiError,
+  createDemoSession,
+  decideAccessRequest,
+  listFeedback,
+  resumeSession,
+  sendFeedback,
+  streamChat,
+} from "./api";
 import type { ChatEvent } from "./api";
 
 function sseResponse(body: string, status = 200): Response {
@@ -114,5 +122,37 @@ describe("JSON endpoints", () => {
     await expect(decideAccessRequest("ar-1", { approved_fields: [] }, "tok-sofia")).rejects.toEqual(
       new ApiError(409),
     );
+  });
+});
+
+describe("feedback", () => {
+  const rating = { session_id: "s1", turn_index: 2, rating: "down", comment: "Faltó la fuente", answer_status: "ok" } as const;
+
+  it("posts the rating with the persona token and returns its id", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ id: "feedback:ana:s1:2" }, { status: 201 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(sendFeedback(rating, "tok-ana")).resolves.toEqual({ id: "feedback:ana:s1:2" });
+    expect(fetchMock).toHaveBeenCalledWith("http://api.test/feedback", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer tok-ana" },
+      body: JSON.stringify(rating),
+    });
+  });
+
+  it("surfaces 409 when the turn was already rated", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("{}", { status: 409 })));
+
+    await expect(sendFeedback(rating, null)).rejects.toEqual(new ApiError(409));
+  });
+
+  it("lists the latest feedback for a Supervisor", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(Response.json([]));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(listFeedback("tok-sofia")).resolves.toEqual([]);
+    expect(fetchMock).toHaveBeenCalledWith("http://api.test/feedback?limit=50", {
+      headers: { Authorization: "Bearer tok-sofia" },
+    });
   });
 });

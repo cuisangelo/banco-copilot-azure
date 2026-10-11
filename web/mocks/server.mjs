@@ -14,6 +14,14 @@ const tokens = new Map(); // token -> persona key
 const accessRequests = new Map(); // id -> AccessRequest
 const checkpoints = new Map(); // session_id -> access request id
 const escalations = new Map(); // id -> decided?
+const feedback = new Map(); // id -> Feedback, in insertion order
+
+// Same patterns as copilot_api.guards.pii_mask.
+const maskPii = (text) =>
+  text
+    .replace(/[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g, "[EMAIL]")
+    .replace(/\b\d{1,2}\.?\d{3}\.?\d{3}-[\dkK]\b/g, "[RUT]")
+    .replace(/\b\d(?:[ -]?\d){12,18}\b/g, "[PAN]");
 
 const now = (offsetMinutes = 0) =>
   new Date(Date.now() + offsetMinutes * 60_000).toISOString().replace(/\.\d{3}Z$/, "Z");
@@ -467,6 +475,29 @@ createServer(async (req, res) => {
     });
     if (approved.length) setTimeout(() => request.status !== "pending" && (request.status = "expired"), GRANT_MINUTES * 60_000).unref();
     return json(res, 200, request);
+  }
+
+  if (req.method === "POST" && url.pathname === "/feedback") {
+    const actor = persona ?? "anonymous";
+    const id = `feedback:${actor}:${body.session_id}:${body.turn_index}`;
+    if (feedback.has(id)) return json(res, 409, { detail: "Ya calificaste esta respuesta." });
+    const { session_id, turn_index, rating, comment = null, answer_status } = body;
+    feedback.set(id, {
+      session_id,
+      turn_index,
+      rating,
+      comment: comment && maskPii(comment),
+      answer_status,
+      id,
+      actor,
+      created_at: now(),
+    });
+    return json(res, 201, { id });
+  }
+
+  if (req.method === "GET" && url.pathname === "/feedback") {
+    if (role !== "Supervisor") return json(res, 403, { detail: "solo Supervisor" });
+    return json(res, 200, [...feedback.values()].reverse().slice(0, Number(url.searchParams.get("limit") ?? 50)));
   }
 
   json(res, 404, { detail: "ruta inexistente en el mock" });
