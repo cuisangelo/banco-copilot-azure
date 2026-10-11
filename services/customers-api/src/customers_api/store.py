@@ -1,10 +1,16 @@
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal, Protocol
+from uuid import uuid4
 
+from azure.cosmos import CosmosClient, DatabaseProxy
+from azure.cosmos.exceptions import CosmosResourceExistsError
+from azure.identity import DefaultAzureCredential
 from pydantic import ConfigDict, TypeAdapter
 
 from bank_contracts.models import CustomerProfile, Grant
+from bank_contracts.settings import require_env
 
 
 class CustomerRecord(CustomerProfile):
@@ -37,3 +43,32 @@ class Store(Protocol):
     def grants_for_customer(self, customer_id: str) -> list[Grant]: ...
 
     def audit(self, entry: dict) -> None: ...
+
+
+class CosmosStore:
+    def __init__(self, database: DatabaseProxy):
+        self._grants = database.get_container_client("grants")
+        self._audit = database.get_container_client("audit")
+
+    @classmethod
+    def from_env(cls) -> "CosmosStore":
+        client = CosmosClient(require_env("COSMOS_ENDPOINT"), credential=DefaultAzureCredential())
+        return cls(client.get_database_client(require_env("COSMOS_DATABASE")))
+
+    def create_grant(self, grant: Grant) -> None:
+        ttl = int((grant.expires_at - datetime.now(UTC)).total_seconds())
+        try:
+            self._grants.create_item(grant.model_dump(mode="json") | {"ttl": ttl})
+        except CosmosResourceExistsError as error:
+            raise GrantExists(grant.id) from error
+
+    def grants_for_customer(self, customer_id: str) -> list[Grant]:
+        items = self._grants.query_items(
+            "SELECT * FROM c WHERE c.customer_id = @customer_id",
+            parameters=[{"name": "@customer_id", "value": customer_id}],
+            partition_key=customer_id,
+        )
+        return [Grant.model_validate(item) for item in items]
+
+    def audit(self, entry: dict) -> None:
+        self._audit.create_item(entry | {"id": uuid4().hex})
