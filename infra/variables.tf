@@ -40,6 +40,17 @@ variable "github_repository" {
   default     = null
 }
 
+variable "web_custom_domain" {
+  type        = string
+  description = "Public hostname of the web app (e.g. azure.example.com). copilot-api only accepts CORS from it."
+}
+
+variable "web_custom_domain_enabled" {
+  type        = bool
+  description = "Bind web_custom_domain to the Static Web App. Azure validates it against a CNAME to the app's default host, so this is a second apply after creating that DNS record."
+  default     = false
+}
+
 variable "ingest_trigger_enabled" {
   type        = bool
   description = "Create the Event Grid subscription to the ingest function. Its webhook handshake only succeeds once the function code is deployed, so this is a second apply."

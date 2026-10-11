@@ -27,6 +27,13 @@ resource "azurerm_static_web_app" "web" {
   sku_size            = "Free"
 }
 
+resource "azurerm_static_web_app_custom_domain" "web" {
+  count             = var.web_custom_domain_enabled ? 1 : 0
+  static_web_app_id = azurerm_static_web_app.web.id
+  domain_name       = var.web_custom_domain
+  validation_type   = "cname-delegation"
+}
+
 locals {
   # Placeholder until deploy.yml pushes the real images; Terraform ignores image changes afterwards.
   placeholder_image = "mcr.microsoft.com/k8se/quickstart:latest"
@@ -74,7 +81,7 @@ locals {
         MCP_BANK_URL                          = "https://${local.mcp_bank_host}/mcp"
         PERSONA_KEY_ID                        = substr(sha256(tls_private_key.persona.public_key_pem), 0, 16)
         DAILY_TOKEN_CAP                       = tostring(var.daily_token_cap)
-        CORS_ORIGIN                           = "https://${azurerm_static_web_app.web.default_host_name}"
+        CORS_ORIGIN                           = "https://${var.web_custom_domain}"
         APPLICATIONINSIGHTS_CONNECTION_STRING = azurerm_application_insights.main.connection_string
       })
       secret_env = {
