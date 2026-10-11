@@ -1,0 +1,17 @@
+[project]
+name = "banco-copilot-azure"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = ["bank-contracts"]
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = ["packages/*"]
+
+[tool.uv.sources]
+bank-contracts = { workspace = true }
+
+[dependency-groups]
+dev = ["pytest>=8"]
