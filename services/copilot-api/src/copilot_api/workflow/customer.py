@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 
 from agent_framework import Executor, WorkflowContext, handler, response_handler
 from bank_contracts.models import AccessRequest, ChatAnswer, FieldsDenied, Level2Field
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 from copilot_api.mcp_bank import ToolFailed
 from copilot_api.prompts import load_prompt
@@ -46,9 +46,9 @@ class Customer(Executor):
         turn.notes.append(message)
         await ctx.send_message(turn)
 
-    async def _tool(self, turn: Turn, calls: list[dict], tool: str, **arguments) -> object:
+    async def _tool(self, turn: Turn, calls: list[dict], tool: str, *, reserved: bool = False, **arguments) -> object:
         """Run one customer tool inside the turn budget, recording it for the audit log and the inspector."""
-        if not take_tool_call(turn):
+        if not reserved and not take_tool_call(turn):
             raise ToolFailed("tool call budget exhausted")
         calls.append({"tool": tool, "arguments": arguments, "result_kind": "error"})
         await self._audit(turn, "tool_call", tool=tool, **arguments)
@@ -79,7 +79,14 @@ class Customer(Executor):
             await emit_trace(ctx, "customer_agent", started, {"tool_calls": calls}, usage)
             await self._without_customer_data(turn, ctx, CUSTOMER_UNAVAILABLE.format(customer_id=turn.customer_id))
             return
+        if turn.profile.products:
+            await self._name_products(turn, calls)
         denied = await self._read_fields(turn, calls, plan.fields) if plan.fields else None
+        # The retry after approval resumes from a snapshot of this turn, taken while product_agent may
+        # still be spending the shared budget: claim the retry's call now so the turn stays within it.
+        if denied and not take_tool_call(turn):
+            turn.notes.append(CUSTOMER_UNAVAILABLE.format(customer_id=turn.customer_id))
+            denied = None
         data = {"tool_calls": calls, "authz.decision": "denied" if denied else "allowed"}
         if denied:
             data["access_request.status"] = "pending"
@@ -89,9 +96,21 @@ class Customer(Executor):
             return
         await ctx.send_message(turn)
 
-    async def _read_fields(self, turn: Turn, calls: list[dict], fields: list[Level2Field]) -> FieldsDenied | None:
+    async def _name_products(self, turn: Turn, calls: list[dict]) -> None:
+        """The profile lists product ids but advisors write names; cite both, taking names only from the API."""
         try:
-            result = await self._tool(turn, calls, "get_customer_fields", customer_id=turn.customer_id, fields=fields)
+            catalog = await self._tool(turn, calls, "list_products", category=None)
+        except (ToolFailed, ValidationError):
+            return
+        turn.product_names = {product.id: product.name for product in catalog if product.id in turn.profile.products}
+
+    async def _read_fields(
+        self, turn: Turn, calls: list[dict], fields: list[Level2Field], *, reserved: bool = False
+    ) -> FieldsDenied | None:
+        try:
+            result = await self._tool(
+                turn, calls, "get_customer_fields", reserved=reserved, customer_id=turn.customer_id, fields=fields
+            )
         except ToolFailed:
             turn.notes.append(CUSTOMER_UNAVAILABLE.format(customer_id=turn.customer_id))
             return None
@@ -129,7 +148,7 @@ class Customer(Executor):
         retry = [field for field in turn.customer_plan.fields if field not in requested.fields or field in approved]
         calls: list[dict] = []
         if retry:
-            denied = await self._read_fields(turn, calls, retry)
+            denied = await self._read_fields(turn, calls, retry, reserved=True)
             if denied is not None:
                 turn.unauthorized_fields += [f for f in denied.denied_fields if f not in turn.unauthorized_fields]
         await emit_trace(

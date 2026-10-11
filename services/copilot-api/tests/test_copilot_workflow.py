@@ -1,3 +1,4 @@
+import asyncio
 import json
 
 import pytest
@@ -9,7 +10,7 @@ from copilot_api.store import InMemoryStore
 from copilot_api.workflow.composer import ComposerOutput, DraftClaim
 from copilot_api.workflow.customer import CustomerPlan
 from copilot_api.workflow.graph import build_workflow
-from copilot_api.workflow.llm import Llm
+from copilot_api.workflow.llm import Llm, Usage
 from copilot_api.workflow.products import ProductCall, ProductPlan
 from copilot_api.workflow.rag import Chunk
 from copilot_api.workflow.router import RouteDecision
@@ -185,6 +186,35 @@ async def test_customer_data_needs_a_persona():
     assert bank.calls == []
 
 
+PROFILE_ONLY = CustomerPlan(fields=[], purpose="Revisar qué productos tiene contratados el cliente")
+
+
+async def profile_snippet(customer_id: str, bank: FakeBank) -> str:
+    bank.actor = "ana"
+    services = make_services(
+        llm=scripted(route("customer", customer_id=customer_id), PROFILE_ONLY, composed(DraftClaim(text="Tiene productos", citation_ids=["S1"]))),
+        bank=bank,
+    )
+    answer = answer_of(await run_turn(services, f"¿Qué productos tiene {customer_id}?", actor="ana", customer_id=customer_id))
+    (snippet,) = [c.snippet for c in answer.citations if c.ref == f"cliente:{customer_id} perfil"]
+    return snippet
+
+
+async def test_profile_snippet_names_each_product_from_the_products_api():
+    bank = FakeBank()
+
+    snippet = await profile_snippet("C-1002", bank)
+
+    assert "productos: Tarjeta Oro (TC-ORO);" in snippet
+    assert ("list_products", {"category": None}) in bank.calls
+
+
+async def test_profile_product_the_api_does_not_know_keeps_its_bare_id():
+    snippet = await profile_snippet("C-1004", FakeBank())
+
+    assert "productos: Tarjeta Oro (TC-ORO), SEGURO-VIDA;" in snippet
+
+
 FICHA = chunk("ficha-hipotecario-1", "Antigüedad laboral mínima: 12 meses con el mismo empleador.")
 CIRCULAR = chunk("circular-2026-07-0", "Desde julio, la antigüedad laboral mínima para hipotecario es de 24 meses.")
 
@@ -204,6 +234,19 @@ async def test_cited_answer_is_ok_with_its_sources():
     assert answer.status == "ok"
     assert [claim.citation_ids for claim in answer.requirements] == [["S1"]]
     assert [(c.id, c.kind, c.ref) for c in answer.citations] == [("S1", "doc", "ficha-hipotecario §Requisitos")]
+
+
+async def test_answer_without_claims_is_insufficient_with_the_composers_message():
+    not_documented = ComposerOutput(
+        message="No encuentro el seguro de mascotas en la documentación vigente.", requirements=[], steps=[]
+    )
+    services = make_services(llm=scripted(route("procedure"), not_documented), retriever=FakeRetriever([FICHA]))
+
+    answer = answer_of(await run_turn(services, "¿requisitos del seguro de mascotas?"))
+
+    assert answer.status == "insufficient"
+    assert answer.message == not_documented.message
+    assert answer.escalation is not None
 
 
 async def test_claim_citing_an_unknown_source_is_insufficient():
@@ -369,3 +412,126 @@ async def test_tool_calls_are_capped_at_five_per_turn():
     await run_turn(services, "¿mantención de la tarjeta Oro?")
 
     assert len(bank.calls) == 5
+
+
+def rag_trace(events):
+    (trace,) = [event.data for event in events if event.type == TRACE_EVENT_TYPE and event.data.node == "rag_agent"]
+    return trace
+
+
+async def test_rag_trace_reports_hybrid_retrieval_without_subqueries():
+    services = make_services(
+        llm=scripted(route("procedure"), composed(DraftClaim(text="12 meses", citation_ids=["S1"]))),
+        retriever=FakeRetriever([FICHA]),
+    )
+
+    trace = rag_trace(await run_turn(services, "¿antigüedad laboral para el hipotecario?"))
+
+    assert trace.data["retrieval_mode"] == "hybrid"
+    assert "subqueries" not in trace.data
+
+
+async def test_rag_trace_reports_agentic_subqueries_and_their_planning_tokens():
+    planned = ["requisitos tarjeta Oro", "requisitos tarjeta Platinum"]
+    retriever = FakeRetriever([FICHA], mode="agentic", subqueries=planned, usage=Usage(500, 40, 0.000264))
+    services = make_services(
+        llm=scripted(route("procedure"), composed(DraftClaim(text="12 meses", citation_ids=["S1"]))), retriever=retriever
+    )
+
+    trace = rag_trace(await run_turn(services, "¿Diferencia entre Oro y Platinum?"))
+
+    assert trace.data["retrieval_mode"] == "agentic"
+    assert trace.data["subqueries"] == planned
+    assert (trace.tokens_in, trace.tokens_out, trace.cost_usd) == (500, 40, 0.000264)
+
+
+class RendezvousBank(FakeBank):
+    """Each branch's first call waits for the other branch to start: only concurrent agents get past it."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._products_started, self._customer_started = asyncio.Event(), asyncio.Event()
+
+    async def get_product(self, product_id: str):
+        self._products_started.set()
+        await asyncio.wait_for(self._customer_started.wait(), timeout=1)
+        return await super().get_product(product_id)
+
+    async def get_customer_profile(self, customer_id: str):
+        self._customer_started.set()
+        await asyncio.wait_for(self._products_started.wait(), timeout=1)
+        return await super().get_customer_profile(customer_id)
+
+
+TENURE_ONLY = CustomerPlan(fields=["employment_tenure_months"], purpose="Verificar antigüedad laboral para el hipotecario")
+ORO_ONLY = ProductPlan(calls=[ProductCall(tool="get_product", product_id="TC-ORO")])
+
+
+def mixed_services(bank: FakeBank, *plans):
+    output = composed(DraftClaim(text="12 meses con el mismo empleador", citation_ids=["S1", "S4"]))
+    return make_services(llm=scripted(route("mixed"), *plans, output), retriever=FakeRetriever([FICHA]), bank=bank)
+
+
+async def test_product_and_customer_agents_run_concurrently_with_the_sequential_answer():
+    expected_refs = [
+        "ficha-hipotecario §Requisitos",
+        "producto:TC-ORO",
+        "cliente:C-1001 perfil",
+        "cliente:C-1001 employment_tenure_months",
+    ]
+    answers = []
+    for bank in (FakeBank(), RendezvousBank()):
+        bank.actor = "ana"
+        bank.grants[("ana", "C-1001")] = {"employment_tenure_months"}
+        services = mixed_services(bank, ORO_ONLY, TENURE_ONLY)
+        answers.append(answer_of(await run_turn(services, "¿C-1001 cumple?", actor="ana", customer_id="C-1001")))
+
+    sequential, concurrent = answers
+    assert concurrent == sequential
+    assert concurrent.status == "ok"
+    assert [citation.ref for citation in concurrent.citations] == expected_refs
+
+
+async def pause_for_access_then_approve(bank: FakeBank, services) -> list:
+    storage = InMemoryCheckpointStorage()
+    first = build_workflow(services, storage)
+    turn = Turn(session_id="s-1", message="¿C-1001 cumple?", customer_id="C-1001", actor="ana", history=[])
+    request = answer_of([event async for event in first.run(turn, stream=True)]).access_request
+    bank.grants[("ana", "C-1001")] = {"employment_tenure_months"}
+    decided = request.model_copy(update={"status": "approved", "approved_fields": ["employment_tenure_months"]})
+    resumed = build_workflow(services, storage)
+    return [
+        event
+        async for event in resumed.run(
+            responses={request.id: decided}, checkpoint_id=first.get_last_checkpoint_id(), stream=True
+        )
+    ]
+
+
+async def test_products_found_before_an_access_pause_reach_the_resumed_answer():
+    bank = FakeBank()
+    bank.actor = "ana"
+
+    answer = answer_of(await pause_for_access_then_approve(bank, mixed_services(bank, ORO_ONLY, TENURE_ONLY)))
+
+    assert answer.status == "ok"
+    assert "producto:TC-ORO" in [citation.ref for citation in answer.citations]
+
+
+class SlowProductsBank(FakeBank):
+    """The products API answers late, so product_agent keeps spending budget after customer_agent paused."""
+
+    async def get_product(self, product_id: str):
+        await asyncio.sleep(0.01)
+        return await super().get_product(product_id)
+
+
+async def test_concurrent_agents_share_five_tool_calls_across_an_access_pause():
+    bank = SlowProductsBank()
+    bank.actor = "ana"
+    greedy = ProductPlan(calls=[ProductCall(tool="get_product", product_id="TC-ORO")] * 3)
+
+    await pause_for_access_then_approve(bank, mixed_services(bank, greedy, TENURE_ONLY))
+
+    assert len(bank.calls) == 5
+    assert bank.calls[-1] == ("get_customer_fields", {"customer_id": "C-1001", "fields": ["employment_tenure_months"]})

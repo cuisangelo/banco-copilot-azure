@@ -6,6 +6,7 @@ from pydantic import BaseModel
 
 from copilot_api.prompts import load_prompt
 from copilot_api.workflow.escalation import ESCALATION_EXECUTOR_ID, EscalationCase
+from copilot_api.workflow.products import ProductFindings
 from copilot_api.workflow.trace import emit_trace
 from copilot_api.workflow.turn import Services, Turn
 
@@ -41,10 +42,14 @@ def build_citations(turn: Turn) -> list[Citation]:
     sources += [("product", f"producto:{product.id}", _product_snippet(product)) for product in turn.products]
     if turn.profile is not None:
         profile = turn.profile
+        products = [
+            f"{turn.product_names[product_id]} ({product_id})" if product_id in turn.product_names else product_id
+            for product_id in profile.products
+        ]
         sources.append((
             "customer",
             f"cliente:{profile.customer_id} perfil",
-            f"segmento {profile.segment}; renta {profile.income_type}; productos: {', '.join(profile.products) or 'ninguno'}; "
+            f"segmento {profile.segment}; renta {profile.income_type}; productos: {', '.join(products) or 'ninguno'}; "
             f"antigüedad como cliente: {profile.customer_tenure_months} meses",
         ))
     if turn.customer_fields is not None:
@@ -70,8 +75,13 @@ class Composer(Executor):
         self._system = load_prompt("composer")
 
     @handler
-    async def run(self, turn: Turn, ctx: WorkflowContext[Turn | EscalationCase]) -> None:
+    async def run(self, branches: list[ProductFindings | Turn], ctx: WorkflowContext[Turn | EscalationCase]) -> None:
         started = time.perf_counter()
+        (findings,) = [branch for branch in branches if isinstance(branch, ProductFindings)]
+        (turn,) = [branch for branch in branches if isinstance(branch, Turn)]
+        turn.products = findings.products
+        # Products first, as the sequential graph produced them.
+        turn.notes = findings.notes + turn.notes
         turn.citations = build_citations(turn)
         if not turn.citations:
             await emit_trace(ctx, "composer", started, {"citations": 0})

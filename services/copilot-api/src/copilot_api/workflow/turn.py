@@ -20,7 +20,7 @@ from copilot_api.workflow.llm import Llm
 if TYPE_CHECKING:
     from copilot_api.workflow.composer import ComposerOutput
     from copilot_api.workflow.customer import CustomerPlan
-    from copilot_api.workflow.rag import Chunk
+    from copilot_api.workflow.rag import Chunk, Retrieval
     from copilot_api.workflow.router import RouteDecision
 
 
@@ -44,6 +44,7 @@ class Turn:
     products: list[Product] = field(default_factory=list)
     customer_plan: CustomerPlan | None = None
     profile: CustomerProfile | None = None
+    product_names: dict[str, str] = field(default_factory=dict)
     customer_fields: CustomerFields | None = None
     unauthorized_fields: list[Level2Field] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
@@ -105,7 +106,7 @@ class BankTools(Protocol):
 
 
 class Retriever(Protocol):
-    async def search(self, query: str, *, top: int) -> list[Chunk]: ...
+    async def search(self, query: str, *, top: int) -> Retrieval: ...
 
 
 @dataclass

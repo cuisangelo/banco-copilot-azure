@@ -2,6 +2,8 @@ import pytest
 from agent_framework.openai import OpenAIChatCompletionClient
 
 from copilot_api.main import deps_from_env
+from copilot_api.workflow.agentic import AgenticRetriever
+from copilot_api.workflow.rag import AzureSearchRetriever
 
 REQUIRED = [
     "APIM_BASE_URL",
@@ -20,6 +22,7 @@ REQUIRED = [
     "PERSONA_KEY_ID",
     "DAILY_TOKEN_CAP",
     "CORS_ORIGIN",
+    "RETRIEVAL_MODE",
 ]
 
 
@@ -42,6 +45,7 @@ def env(monkeypatch, private_key_pem):
         "PERSONA_KEY_ID": "persona-1",
         "DAILY_TOKEN_CAP": "2000000",
         "CORS_ORIGIN": "https://web.example",
+        "RETRIEVAL_MODE": "hybrid",
     }
     for name, value in values.items():
         monkeypatch.setenv(name, value)
@@ -63,3 +67,17 @@ def test_chat_goes_through_chat_completions_with_the_configured_api_version(env)
     assert isinstance(client, OpenAIChatCompletionClient)
     assert client.client._api_version == "2024-10-21"
     assert deps.llm.model == "gpt-4.1-mini"
+
+
+@pytest.mark.parametrize(("mode", "retriever"), [("hybrid", AzureSearchRetriever), ("agentic", AgenticRetriever)])
+def test_retrieval_mode_picks_the_retriever(env, mode, retriever):
+    env.setenv("RETRIEVAL_MODE", mode)
+
+    assert isinstance(deps_from_env().retriever, retriever)
+
+
+def test_unknown_retrieval_mode_fails_at_startup(env):
+    env.setenv("RETRIEVAL_MODE", "semantic")
+
+    with pytest.raises(RuntimeError, match="RETRIEVAL_MODE"):
+        deps_from_env()

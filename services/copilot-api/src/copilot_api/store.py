@@ -31,6 +31,7 @@ from pydantic_core import TzInfo
 from copilot_api.workflow.composer import ComposerOutput, DraftClaim
 from copilot_api.workflow.customer import CustomerPlan
 from copilot_api.workflow.escalation import EscalationCase
+from copilot_api.workflow.products import ProductFindings
 from copilot_api.workflow.rag import Chunk
 from copilot_api.workflow.router import RouteDecision
 from copilot_api.workflow.turn import HistoryEntry, Turn
@@ -136,6 +137,7 @@ CHECKPOINT_TYPES: frozenset[str] = frozenset(
         DraftClaim,
         CustomerPlan,
         EscalationCase,
+        ProductFindings,
         Chunk,
         RouteDecision,
         HistoryEntry,

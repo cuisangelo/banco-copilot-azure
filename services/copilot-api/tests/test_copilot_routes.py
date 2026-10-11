@@ -126,6 +126,7 @@ async def test_customer_trace_reports_the_denial_without_values(api):
     assert customer["authz.decision"] == "denied"
     assert customer["tool_calls"] == [
         {"tool": "get_customer_profile", "arguments": {"customer_id": "C-1001"}, "result_kind": "ok"},
+        {"tool": "list_products", "arguments": {"category": None}, "result_kind": "ok"},
         {
             "tool": "get_customer_fields",
             "arguments": {"customer_id": "C-1001", "fields": ["monthly_income"]},

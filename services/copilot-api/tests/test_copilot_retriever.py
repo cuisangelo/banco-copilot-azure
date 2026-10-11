@@ -44,9 +44,10 @@ async def test_hybrid_semantic_query_maps_reranker_score():
         }
     ])
 
-    chunks = await AzureSearchRetriever(search, FakeEmbeddings()).search("antigüedad hipotecario", top=5)
+    retrieval = await AzureSearchRetriever(search, FakeEmbeddings()).search("antigüedad hipotecario", top=5)
 
-    assert [(chunk.id, chunk.reranker_score) for chunk in chunks] == [("ficha-hipotecario-1", 2.7)]
+    assert retrieval.mode == "hybrid"
+    assert [(chunk.id, chunk.reranker_score) for chunk in retrieval.chunks] == [("ficha-hipotecario-1", 2.7)]
     assert search.kwargs["query_type"] == "semantic"
     assert search.kwargs["semantic_configuration_name"] == "default"
     assert search.kwargs["search_text"] == "antigüedad hipotecario"
