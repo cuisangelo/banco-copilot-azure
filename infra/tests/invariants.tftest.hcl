@@ -33,7 +33,7 @@ run "every_required_env_var_from_the_contracts_is_set" {
       for app, names in {
         "products-api"  = ["BACKEND_SECRET", "PRODUCTS_PATH"]
         "customers-api" = ["BACKEND_SECRET", "CUSTOMERS_PATH", "PERSONA_PUBLIC_KEY_PEM", "COSMOS_ENDPOINT", "COSMOS_DATABASE"]
-        "mcp-bank"      = ["APIM_BASE_URL", "APIM_SUBSCRIPTION_KEY"]
+        "mcp-bank"      = ["APIM_BASE_URL", "APIM_SUBSCRIPTION_KEY", "MCP_ALLOWED_HOSTS"]
         "copilot-api" = [
           "APIM_BASE_URL", "APIM_SUBSCRIPTION_KEY", "AZURE_OPENAI_ENDPOINT", "AZURE_OPENAI_CHAT_DEPLOYMENT",
           "AZURE_OPENAI_EMBEDDING_DEPLOYMENT", "AZURE_OPENAI_API_VERSION", "SEARCH_ENDPOINT", "SEARCH_INDEX",

@@ -33,7 +33,7 @@ locals {
   app_port          = 8000
 
   app_names     = { for svc in local.services : svc => "${var.prefix}-${svc}" }
-  mcp_bank_url  = "https://${local.app_names["mcp-bank"]}.internal.${azurerm_container_app_environment.main.default_domain}/mcp"
+  mcp_bank_host = "${local.app_names["mcp-bank"]}.internal.${azurerm_container_app_environment.main.default_domain}"
   cosmos_values = { COSMOS_ENDPOINT = azurerm_cosmosdb_account.main.endpoint, COSMOS_DATABASE = azurerm_cosmosdb_sql_database.copilot.name }
 
   # env: plain values. secret_env: env var name => Key Vault secret name.
@@ -52,8 +52,12 @@ locals {
       }
     }
     "mcp-bank" = {
-      external   = false
-      env        = { APIM_BASE_URL = azurerm_api_management.main.gateway_url }
+      external = false
+      env = {
+        APIM_BASE_URL = azurerm_api_management.main.gateway_url
+        # FastMCP answers 421 to any Host header not listed here.
+        MCP_ALLOWED_HOSTS = local.mcp_bank_host
+      }
       secret_env = { APIM_SUBSCRIPTION_KEY = "apim-subscription-key" }
     }
     "copilot-api" = {
@@ -67,7 +71,7 @@ locals {
         SEARCH_ENDPOINT                       = "https://${azurerm_search_service.main.name}.search.windows.net"
         SEARCH_INDEX                          = local.search_index
         CONTENT_SAFETY_ENDPOINT               = azurerm_cognitive_account.content_safety.endpoint
-        MCP_BANK_URL                          = local.mcp_bank_url
+        MCP_BANK_URL                          = "https://${local.mcp_bank_host}/mcp"
         PERSONA_KEY_ID                        = substr(sha256(tls_private_key.persona.public_key_pem), 0, 16)
         DAILY_TOKEN_CAP                       = tostring(var.daily_token_cap)
         CORS_ORIGIN                           = "https://${azurerm_static_web_app.web.default_host_name}"
