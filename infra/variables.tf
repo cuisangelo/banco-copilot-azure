@@ -40,6 +40,11 @@ variable "github_repository" {
   default     = null
 }
 
+variable "cosmos_location" {
+  type        = string
+  description = "Region for Cosmos DB. Kept apart from location because Cosmos refuses new accounts in regions under high demand."
+}
+
 variable "web_custom_domain" {
   type        = string
   description = "Public hostname of the web app (e.g. azure.example.com). copilot-api only accepts CORS from it."

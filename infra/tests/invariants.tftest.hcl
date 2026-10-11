@@ -24,6 +24,7 @@ variables {
   daily_token_cap     = 1000
   budget_alert_emails = ["owner@example.com"]
   web_custom_domain   = "copilot.example.com"
+  cosmos_location     = "canadacentral"
 }
 
 run "every_required_env_var_from_the_contracts_is_set" {
