@@ -226,6 +226,8 @@ class ErrorEvent(BaseModel):
     message: str
 ```
 
+`session_id` lo genera el cliente con `crypto.randomUUID()`; `copilot-api` lo trata como opaco.
+
 **SSE de `/chat` y `/sessions/{id}/resume`:**
 
 - `event: trace` → `TraceEvent`
@@ -287,9 +289,10 @@ APIM. Sin ella, la respuesta es 401.
 | copilot-api | `POST /demo/session` con body `{"persona": "ana"}` | — | `{"token": str, "name": str, "role": Role}` |
 | copilot-api | `GET /.well-known/jwks.json` | — | JWKS con la llave pública |
 | copilot-api | `POST /chat` (body `ChatRequest`) | opcional (sin token, solo nivel 0) | SSE |
-| copilot-api | `POST /sessions/{session_id}/resume` | el mismo `sub` que inició | SSE |
+| copilot-api | `POST /sessions/{session_id}/resume` (sin body; reanuda el checkpoint pendiente de la sesión) | el mismo `sub` que inició | SSE; 409 si la sesión no tiene un checkpoint pendiente |
 | copilot-api | `POST /escalations/{id}/decision` (body `EscalationDecision`) | el mismo `sub` que inició | `{"ticket_id": str}` o `{"discarded": true}` |
-| copilot-api | `GET /access-requests?status=pending` | rol Supervisor | `list[AccessRequest]` |
+| copilot-api | `GET /access-requests?status=` (cualquier `AccessRequestStatus`; sin `status`, todas) | rol Supervisor | `list[AccessRequest]` |
+| copilot-api | `GET /access-requests/{id}` | `sub == requested_by` o rol Supervisor | `AccessRequest`; 403 si no es el solicitante ni Supervisor; 404 si no existe |
 | copilot-api | `POST /access-requests/{id}/decision` (body `AccessDecision`) | rol Supervisor, `sub != requested_by` | `AccessRequest`, o 409 si ya estaba decidida |
 
 Rutas en APIM:
