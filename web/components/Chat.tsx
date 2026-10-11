@@ -27,7 +27,7 @@ const SUGGESTIONS: { text: string; customerId?: string }[] = [
   { text: "¿Diferencia entre Oro y Platinum?" },
   { text: "Cliente quiere un crédito de consumo" },
   { text: "¿Antigüedad laboral mínima para el hipotecario?" },
-  { text: "¿C-1042 cumple para el hipotecario?", customerId: "C-1042" },
+  { text: "¿C-1007 cumple para el hipotecario?", customerId: "C-1007" },
 ];
 
 function describeFailure(err: unknown): string {
@@ -115,7 +115,7 @@ export function Chat() {
                 id="customer"
                 value={customerId}
                 onChange={(e) => setCustomerId(e.target.value.toUpperCase().trim())}
-                placeholder="C-1042"
+                placeholder="C-1007"
                 autoComplete="off"
                 aria-invalid={customerInvalid}
                 aria-describedby="customer-hint"

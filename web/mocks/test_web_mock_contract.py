@@ -1,6 +1,7 @@
 """The web mock must speak exactly the copilot-api contract: every payload round-trips through bank_contracts."""
 
 import json
+import re
 import socket
 import subprocess
 import time
@@ -88,7 +89,7 @@ MESSAGES = [
     ("¿Antigüedad laboral mínima para el hipotecario?", None, "contradiction"),
     ("¿Qué opinas de bitcoin?", None, "rejected"),
     ("¿Requisito para abrir una cuenta en dólares?", None, "insufficient"),
-    ("Atiendo al cliente, ¿qué le puedo ofrecer?", "C-1042", "ok"),
+    ("Atiendo al cliente, ¿qué le puedo ofrecer?", "C-1007", "ok"),
 ]
 
 
@@ -108,7 +109,7 @@ def test_access_request_round_trip(base_url):
     ana, sofia = login(base_url, "ana"), login(base_url, "sofia")
     session = "s-access"
     events = stream(
-        base_url, "/chat", {"session_id": session, "message": "¿C-1042 cumple para el hipotecario?", "customer_id": "C-1042"}, ana
+        base_url, "/chat", {"session_id": session, "message": "¿C-1007 cumple para el hipotecario?", "customer_id": "C-1007"}, ana
     )
     answer = events[-1][1]
     assert answer.status == "access_required"
@@ -144,3 +145,37 @@ def test_escalation_decision(base_url):
 
 def test_unknown_token_is_401(base_url):
     assert call(base_url, "POST", "/chat", {"session_id": "s", "message": "hola", "customer_id": None}, "expired")[0] == 401
+
+
+DATA = Path(__file__).resolve().parents[2] / "data"
+
+
+def real_doc_refs() -> set[str]:
+    refs = set()
+    for doc in (DATA / "docs").glob("*.md"):
+        text = doc.read_text()
+        doc_id = re.search(r"^doc_id: (.+)$", text, re.M).group(1).strip()
+        refs |= {f"{doc_id} §{heading.strip()}" for heading in re.findall(r"^## (.+)$", text, re.M)}
+    return refs
+
+
+@pytest.mark.skipif(not DATA.exists(), reason="data/ arrives with WP2; this check runs on the integrated branch")
+def test_mock_cites_real_documents_and_customers(base_url):
+    customers = {c["customer_id"] for c in json.loads((DATA / "customers.json").read_text())}
+    ana, sofia = login(base_url, "ana"), login(base_url, "sofia")
+
+    answers = [
+        stream(base_url, "/chat", {"session_id": f"real-{i}", "message": m, "customer_id": c}, ana)[-1][1]
+        for i, (m, c, _) in enumerate(MESSAGES)
+    ]
+    session = "real-access"
+    body = {"session_id": session, "message": "¿C-1007 cumple para el hipotecario?", "customer_id": "C-1007"}
+    request = stream(base_url, "/chat", body, ana)[-1][1].access_request
+    call(base_url, "POST", f"/access-requests/{request.id}/decision", {"approved_fields": request.fields}, sofia)
+    answers.append(stream(base_url, f"/sessions/{session}/resume", None, ana)[-1][1])
+
+    citations = [c for a in answers for c in a.citations + (a.escalation.evidence if a.escalation else [])]
+    assert {c.ref for c in citations if c.kind == "doc"} <= real_doc_refs()
+    assert {c.ref.split()[0].removeprefix("cliente:") for c in citations if c.kind == "customer"} <= customers
+    requests = TypeAdapter(list[AccessRequest]).validate_json(call(base_url, "GET", "/access-requests", token=sofia)[1])
+    assert {r.customer_id for r in requests} <= customers

@@ -20,7 +20,7 @@ const now = (offsetMinutes = 0) =>
 
 function seedRequest(fields) {
   const request = {
-    customer_id: "C-1017",
+    customer_id: "C-1013",
     fields: ["monthly_income", "current_debt"],
     purpose: "Evaluar si cumple renta y carga financiera para el crédito de consumo solicitado.",
     id: randomUUID(),
@@ -36,7 +36,7 @@ function seedRequest(fields) {
 }
 seedRequest({});
 seedRequest({
-  customer_id: "C-1009",
+  customer_id: "C-1015",
   fields: ["payment_behavior"],
   purpose: "Confirmar comportamiento de pago antes de ofrecer aumento de cupo en tarjeta Oro.",
   status: "approved",
@@ -52,11 +52,20 @@ const FIELD_LABELS = {
   payment_behavior: "comportamiento de pago",
   employment_tenure_months: "antigüedad laboral",
 };
-const FIELD_VALUES = {
-  monthly_income: [1850000, "$1.850.000"],
-  current_debt: [420000, "$420.000"],
-  payment_behavior: ["al_dia", "al día"],
-  employment_tenure_months: [30, "30 meses"],
+// Copied from data/customers.json (WP2) for the customers the demo scenarios use.
+const CUSTOMERS = {
+  "C-1007": {
+    segment: "preferente",
+    income_type: "dependiente",
+    products: ["CTA-CORRIENTE", "TC-ORO"],
+    level2: { monthly_income: "$2.350.000", current_debt: "$4.800.000", payment_behavior: "al día", employment_tenure_months: "18 meses" },
+  },
+  "C-1013": {
+    segment: "personas",
+    income_type: "dependiente",
+    products: ["CTA-SUELDO", "TC-CLASICA", "CRED-CONSUMO"],
+    level2: { monthly_income: "$720.000", current_debt: "$6.100.000", payment_behavior: "atraso de 90 días", employment_tenure_months: "19 meses" },
+  },
 };
 
 const doc = (id, ref, snippet) => ({ id, kind: "doc", ref, snippet });
@@ -93,10 +102,22 @@ const route = (name) => trace("router", 410, { route: name }, 612, 9);
 
 function salaryAccount() {
   const citations = [
-    doc("c1", "ficha-cuenta-sueldo §Requisitos", "Cédula de identidad vigente y las tres últimas liquidaciones de sueldo."),
-    doc("c2", "ficha-cuenta-sueldo §Requisitos", "Contrato de trabajo indefinido o a plazo fijo con al menos 3 meses de antigüedad."),
-    doc("c3", "procedimiento-apertura-cuenta §Validación", "Validar identidad con huella o clave única antes de registrar al cliente."),
-    doc("c4", "procedimiento-apertura-cuenta §Alta", "Registrar empleador y fecha de pago para activar el abono automático."),
+    doc("c1", "ficha-cuenta-sueldo §2. Requisitos", "Ser trabajador dependiente. Cédula de identidad vigente."),
+    doc(
+      "c2",
+      "ficha-cuenta-sueldo §2. Requisitos",
+      "Empleador con convenio de pago de remuneraciones vigente con Banco Austral. Última liquidación de sueldo o, si el trabajador recién ingresó a la empresa, contrato de trabajo firmado.",
+    ),
+    doc(
+      "c3",
+      "procedimiento-apertura-cuenta §2. Verificación de identidad",
+      "Solicitar la cédula de identidad vigente y validarla en el verificador de documentos. Realizar la validación biométrica de huella o rostro.",
+    ),
+    doc(
+      "c4",
+      "procedimiento-apertura-cuenta §3. Pasos para Cuenta Sueldo",
+      "Verificar en el buscador de convenios que el empleador tenga convenio vigente. Generar el contrato de cuenta vista y obtener la firma electrónica del cliente.",
+    ),
   ];
   return {
     traces: [
@@ -104,24 +125,24 @@ function salaryAccount() {
       route("procedure"),
       trace("rag_agent", 820, {
         chunks: [
-          { doc: "ficha-cuenta-sueldo", section: "Requisitos", score: 2.84 },
-          { doc: "procedimiento-apertura-cuenta", section: "Validación", score: 2.41 },
-          { doc: "procedimiento-apertura-cuenta", section: "Alta", score: 2.12 },
+          { doc: "ficha-cuenta-sueldo", section: "2. Requisitos", score: 2.84 },
+          { doc: "procedimiento-apertura-cuenta", section: "3. Pasos para Cuenta Sueldo", score: 2.41 },
+          { doc: "procedimiento-apertura-cuenta", section: "2. Verificación de identidad", score: 2.12 },
         ],
       }, 96, 0),
-      trace("composer", 1640, { claims: 6 }, 2310, 284),
+      trace("composer", 1640, { claims: 7 }, 2310, 284),
       trace("verifier", 520, { groundedness: 0.97, uncited_claims: 0, contradictions: 0 }, 1180, 12),
     ],
-    answer: answer("ok", "Para una cuenta sueldo de cliente dependiente pide estos documentos y sigue este orden.", {
+    answer: answer("ok", "Para una cuenta sueldo de cliente dependiente pide estos documentos y sigue este orden. No se exige renta mínima.", {
       requirements: [
         claim("Cédula de identidad vigente", "c1"),
-        claim("Tres últimas liquidaciones de sueldo", "c1"),
-        claim("Contrato de trabajo con al menos 3 meses de antigüedad", "c2"),
+        claim("Empleador con convenio de pago de remuneraciones vigente con Banco Austral", "c2"),
+        claim("Última liquidación de sueldo, o contrato de trabajo firmado si recién ingresó", "c2"),
       ],
       steps: [
-        claim("Valida la identidad con huella o clave única", "c3"),
-        claim("Registra al empleador y la fecha de pago", "c4"),
-        claim("Firma el contrato digital y entrega la tarjeta de débito", "c3", "c4"),
+        claim("Valida la cédula y haz la validación biométrica de huella o rostro", "c3"),
+        claim("Verifica el convenio del empleador en el buscador de convenios", "c4"),
+        claim("Genera el contrato de cuenta vista y obtén la firma electrónica", "c4"),
       ],
       citations,
     }),
@@ -139,16 +160,16 @@ function compareCards() {
     ],
     answer: answer("ok", "Comparación de las tarjetas Oro y Platinum con valores vigentes del sistema de productos.", {
       requirements: [
-        claim("Oro: renta mínima de $900.000 líquidos", "p1"),
-        claim("Platinum: renta mínima de $1.800.000 líquidos", "p2"),
+        claim("Oro: renta líquida mínima de $900.000 y edad desde 21 años", "p1"),
+        claim("Platinum: renta líquida mínima de $1.800.000, 6 meses como cliente y pagos al día", "p2"),
       ],
       steps: [
-        claim("Oro: mantención mensual de $4.990 y tasa anual de 38,4 %", "p1"),
-        claim("Platinum: mantención mensual de $8.990 y tasa anual de 34,8 %", "p2"),
+        claim("Oro: mantención mensual de $4.990 y tasa anual de 32,4 %", "p1"),
+        claim("Platinum: mantención mensual de $9.990 y tasa anual de 28,8 %", "p2"),
       ],
       citations: [
-        product("p1", "producto:TC-ORO", "Tarjeta Oro · mantención $4.990 · tasa 38,4 % · vigente desde 2026-07-01"),
-        product("p2", "producto:TC-PLATINUM", "Tarjeta Platinum · mantención $8.990 · tasa 34,8 % · vigente desde 2026-07-01"),
+        product("p1", "producto:TC-ORO", "Tarjeta de Crédito Austral Oro. Mantención $4.990, tasa anual 32,4 %. Vigente desde 2026-03-01."),
+        product("p2", "producto:TC-PLATINUM", "Tarjeta de Crédito Austral Platinum. Mantención $9.990, tasa anual 28,8 %. Vigente desde 2026-03-01."),
       ],
     }),
   };
@@ -164,19 +185,20 @@ function consumerLoan() {
   };
 }
 
+const MORTGAGE_TENURE = [
+  doc("d1", "ficha-credito-hipotecario §3. Requisitos", "Dependientes: antigüedad laboral mínima de 12 meses con el empleador actual."),
+  doc("d2", "circular-2026-07 §2. Cambio de criterio", "A contar del 1 de agosto de 2026, para dependientes la antigüedad laboral mínima con el empleador actual será de 24 meses."),
+];
+
 function mortgageTenure() {
-  const citations = [
-    doc("d1", "ficha-credito-hipotecario §Requisitos", "Antigüedad laboral mínima de 12 meses con el empleador actual."),
-    doc("d2", "circular-2026-07 §2", "Desde julio de 2026 la antigüedad laboral mínima para créditos hipotecarios es de 24 meses."),
-  ];
   return {
     traces: [
       guard(),
       route("procedure"),
       trace("rag_agent", 760, {
         chunks: [
-          { doc: "ficha-credito-hipotecario", section: "Requisitos", score: 2.77 },
-          { doc: "circular-2026-07", section: "2", score: 2.69 },
+          { doc: "ficha-credito-hipotecario", section: "3. Requisitos", score: 2.77 },
+          { doc: "circular-2026-07", section: "2. Cambio de criterio", score: 2.69 },
         ],
       }, 88, 0),
       trace("composer", 1350, { claims: 2 }, 1720, 141),
@@ -189,13 +211,13 @@ function mortgageTenure() {
       {
         requirements: [
           claim("La ficha del hipotecario exige 12 meses de antigüedad laboral", "d1"),
-          claim("La circular 2026-07 exige 24 meses de antigüedad laboral", "d2"),
+          claim("La circular 2026-07 exige 24 meses desde el 1 de agosto de 2026", "d2"),
         ],
-        citations,
+        citations: MORTGAGE_TENURE,
         escalation: escalation(
           "Riesgo de crédito hipotecario",
-          "La ficha del crédito hipotecario (12 meses) y la circular 2026-07 (24 meses) difieren en la antigüedad laboral mínima. Se solicita confirmar el requisito vigente y actualizar la ficha.",
-          citations,
+          "La ficha del crédito hipotecario (12 meses) y la circular 2026-07 (24 meses) difieren en la antigüedad laboral mínima de dependientes. Se solicita confirmar el requisito vigente y actualizar la ficha.",
+          MORTGAGE_TENURE,
         ),
       },
     ),
@@ -217,12 +239,14 @@ function injection() {
 }
 
 function notDocumented() {
-  const evidence = [doc("e1", "ficha-cuenta-corriente §Monedas", "La cuenta corriente opera solo en pesos chilenos.")];
+  const evidence = [
+    doc("e1", "ficha-cuenta-corriente §4. Condiciones comerciales", "Comisiones y condiciones de la Cuenta Corriente Austral, expresadas en pesos chilenos."),
+  ];
   return {
     traces: [
       guard(),
       route("procedure"),
-      trace("rag_agent", 700, { chunks: [{ doc: "ficha-cuenta-corriente", section: "Monedas", score: 1.12 }], below_threshold: true }, 72, 0),
+      trace("rag_agent", 700, { chunks: [{ doc: "ficha-cuenta-corriente", section: "4. Condiciones comerciales", score: 1.12 }], below_threshold: true }, 72, 0),
       trace("escalation", 15, { draft: true, approval: "pending" }),
     ],
     answer: answer("insufficient", "No lo encuentro en la documentación vigente. Si el cliente lo necesita, puedo escalar la consulta.", {
@@ -235,7 +259,19 @@ function notDocumented() {
   };
 }
 
+function unknownCustomer(customerId) {
+  return {
+    traces: [
+      guard(),
+      route("customer"),
+      trace("customer_agent", 300, { tool: "get_customer_profile", args: { customer_id: customerId }, authz: "404" }, 380, 14),
+    ],
+    answer: answer("insufficient", `No encuentro al cliente ${customerId}. Revisa el identificador.`),
+  };
+}
+
 function customerProfile(customerId) {
+  const profile = CUSTOMERS[customerId];
   return {
     traces: [
       guard(),
@@ -244,16 +280,15 @@ function customerProfile(customerId) {
       trace("composer", 990, { claims: 3 }, 1210, 132),
       trace("verifier", 450, { groundedness: 0.98, uncited_claims: 0, contradictions: 0 }, 860, 9),
     ],
-    answer: answer("ok", `Perfil básico de ${customerId}: puedes ofrecer productos acordes a su segmento.`, {
+    answer: answer("ok", `Perfil básico de ${customerId}. Para ofrecer crédito necesitarás datos de nivel 2.`, {
       requirements: [
-        claim("Segmento preferente, con renta dependiente", "k1", "k2"),
-        claim("Ya tiene cuenta corriente y tarjeta Clásica", "k3"),
+        claim(`Segmento ${profile.segment}, con renta ${profile.income_type}`, "k1", "k2"),
+        claim(`Productos vigentes: ${profile.products.join(", ")}`, "k3"),
       ],
-      steps: [claim("Ofrece el cambio a tarjeta Oro: su segmento califica", "k1", "k3")],
       citations: [
-        customer("k1", `cliente:${customerId} segment`, "Segmento: preferente"),
-        customer("k2", `cliente:${customerId} income_type`, "Tipo de renta: dependiente"),
-        customer("k3", `cliente:${customerId} products`, "Productos: CTA-CORRIENTE, TC-CLASICA"),
+        customer("k1", `cliente:${customerId} segment`, `Segmento: ${profile.segment}`),
+        customer("k2", `cliente:${customerId} income_type`, `Tipo de renta: ${profile.income_type}`),
+        customer("k3", `cliente:${customerId} products`, `Productos: ${profile.products.join(", ")}`),
       ],
     }),
   };
@@ -289,20 +324,23 @@ function requestAccess(sessionId, customerId, persona) {
   };
 }
 
+const MORTGAGE_INCOME = doc("h1", "ficha-credito-hipotecario §3. Requisitos", "Renta líquida mensual mínima de $1.200.000, individual o complementada con cónyuge o conviviente civil.");
+
 function resumed(request) {
+  const values = CUSTOMERS[request.customer_id].level2;
   const approved = request.approved_fields;
   const denied = request.fields.filter((f) => !approved.includes(f));
-  const citations = approved.map((f, i) =>
-    customer(`g${i + 1}`, `cliente:${request.customer_id} ${f}`, `${FIELD_LABELS[f]}: ${FIELD_VALUES[f][1]}`),
-  );
+  const label = (f) => `${FIELD_LABELS[f][0].toUpperCase()}${FIELD_LABELS[f].slice(1)}`;
+  const citations = approved.map((f) => customer(`g-${f}`, `cliente:${request.customer_id} ${f}`, `${label(f)}: ${values[f]}`));
+  citations.push(MORTGAGE_INCOME, ...MORTGAGE_TENURE);
+  const support = { monthly_income: "h1", employment_tenure_months: "d1" };
   const requirements = [
-    ...approved.map((f, i) => claim(`Su ${FIELD_LABELS[f]} es ${FIELD_VALUES[f][1]}`, `g${i + 1}`)),
-    ...denied.map((f) => claim(`${FIELD_LABELS[f][0].toUpperCase()}${FIELD_LABELS[f].slice(1)}: no autorizado — verificar con el cliente`, "h1")),
+    ...approved.map((f) => claim(`${label(f)}: ${values[f]}`, `g-${f}`, support[f])),
+    ...denied.map((f) => claim(`${label(f)}: no autorizado — verificar con el cliente`, support[f])),
   ];
-  citations.push(doc("h1", "ficha-credito-hipotecario §Requisitos", "Renta líquida mínima de $1.500.000 y antigüedad laboral mínima de 12 meses."));
   const status = approved.length ? "ok" : "insufficient";
   const message = approved.length
-    ? "Con los datos aprobados, esto es lo que se cumple. La decisión final es del área de riesgo."
+    ? "Con los datos aprobados, esto es lo que se puede verificar. La decisión final es del área de riesgo."
     : "La solicitud fue rechazada. Respondo solo con los requisitos del producto; los datos del cliente quedan por verificar.";
   return {
     traces: [
@@ -323,6 +361,7 @@ function chatScenario({ session_id, message, customer_id }, persona) {
     if (!persona || PERSONAS[persona][1] !== "Asesor") {
       return { error: { code: "unauthorized", message: "Para consultar datos de un cliente elige una persona con rol Asesor." } };
     }
+    if (!CUSTOMERS[customer_id]) return unknownCustomer(customer_id);
     if (/cumple|renta|deuda|hipotecario/.test(text)) return requestAccess(session_id, customer_id, persona);
     return customerProfile(customer_id);
   }
