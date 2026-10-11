@@ -1,0 +1,25 @@
+{
+  "subscriptionId": "00000000-0000-0000-0000-000000000000",
+  "tenantDomain": "demo.onmicrosoft.com",
+  "resourceGroup": "demo-rg",
+  "resources": [
+    { "key": "copilot-api", "name": "demo-copilot-api", "type": "Microsoft.App/containerApps", "location": "canadaeast" },
+    { "key": "mcp-bank", "name": "demo-mcp-bank", "type": "Microsoft.App/containerApps", "location": "canadaeast" },
+    { "key": "products-api", "name": "demo-products-api", "type": "Microsoft.App/containerApps", "location": "canadaeast" },
+    { "key": "customers-api", "name": "demo-customers-api", "type": "Microsoft.App/containerApps", "location": "canadaeast" },
+    { "key": "container-apps-env", "name": "demo-env", "type": "Microsoft.App/managedEnvironments", "location": "canadaeast" },
+    { "key": "foundry", "name": "demo-foundry", "type": "Microsoft.CognitiveServices/accounts", "location": "canadaeast" },
+    { "key": "content-safety", "name": "demo-safety-eastus2", "type": "Microsoft.CognitiveServices/accounts", "location": "eastus2" },
+    { "key": "search", "name": "demo-search", "type": "Microsoft.Search/searchServices", "location": "canadaeast" },
+    { "key": "cosmos", "name": "demo-cosmos", "type": "Microsoft.DocumentDB/databaseAccounts", "location": "eastus2" },
+    { "key": "apim", "name": "demo-apim", "type": "Microsoft.ApiManagement/service", "location": "canadaeast" },
+    { "key": "key-vault", "name": "demo-kv", "type": "Microsoft.KeyVault/vaults", "location": "canadaeast" },
+    { "key": "app-insights", "name": "demo-appi", "type": "Microsoft.Insights/components", "location": "canadaeast" },
+    { "key": "log-analytics", "name": "demo-logs", "type": "Microsoft.OperationalInsights/workspaces", "location": "canadaeast" },
+    { "key": "container-registry", "name": "demoacr", "type": "Microsoft.ContainerRegistry/registries", "location": "canadaeast" },
+    { "key": "storage", "name": "demost", "type": "Microsoft.Storage/storageAccounts", "location": "canadaeast" },
+    { "key": "storage-events", "name": "demo-storage-events", "type": "Microsoft.EventGrid/systemTopics", "location": "canadaeast" },
+    { "key": "ingest", "name": "demo-ingest", "type": "Microsoft.Web/sites", "location": "canadaeast" },
+    { "key": "web", "name": "demo-web", "type": "Microsoft.Web/staticSites", "location": "eastus2" }
+  ]
+}

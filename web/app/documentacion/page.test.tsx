@@ -2,8 +2,14 @@ import { render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import DocumentationPage from "./page";
 
+vi.mock("./inventory", async () => {
+  const { resolveDeployment } = await import("./azure");
+  const { default: fixture } = await import("./__fixtures__/inventory.json");
+  return { loadDeployment: () => resolveDeployment(fixture) };
+});
+
 const PORTAL_RG =
-  "https://portal.azure.com/#@example.onmicrosoft.com/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/bcopilot-rg";
+  "https://portal.azure.com/#@demo.onmicrosoft.com/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/demo-rg";
 
 beforeEach(() => {
   vi.stubGlobal("fetch", vi.fn().mockReturnValue(new Promise(() => {})));
@@ -52,10 +58,10 @@ describe("/documentacion", () => {
 
   it("points a resource at the provider type it actually is", () => {
     render(<DocumentationPage />);
-    const cosmos = screen.getByRole("heading", { name: "bcopilot-xxxxx-cosmos" }).closest("li")!;
+    const cosmos = screen.getByRole("heading", { name: "demo-cosmos" }).closest("li")!;
     expect(within(cosmos).getByRole("link", { name: /Ver en Azure/ })).toHaveAttribute(
       "href",
-      `${PORTAL_RG}/providers/Microsoft.DocumentDB/databaseAccounts/bcopilot-xxxxx-cosmos/overview`,
+      `${PORTAL_RG}/providers/Microsoft.DocumentDB/databaseAccounts/demo-cosmos/overview`,
     );
   });
 

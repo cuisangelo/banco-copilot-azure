@@ -1,4 +1,4 @@
-import { RESOURCE_GROUP_URL, RESOURCES, portalUrl, type AzureResource } from "./azure";
+import { portalUrl, resourceByKey, type AzureResource, type Deployment, type ResourceKey } from "./azure";
 
 // Laid out in the style of the Azure Architecture Center: nested dashed boundaries, official icons with
 // the product name underneath, numbered steps on the request path. Every resource is a link to the portal.
@@ -9,32 +9,38 @@ const MUTED = "#55657f";
 const REQUEST = "#0047bb";
 const INGEST = "#55657f";
 
-const byName = (name: string): AzureResource => {
-  const resource = RESOURCES.find((r) => r.name === name);
-  if (!resource) throw new Error(`${name} is not in the deployed inventory`);
-  return resource;
-};
-
-// Icon centers. Each entry must name a resource of the inventory.
-const NODES: { name: string; x: number; y: number; note?: string }[] = [
-  { name: "bcopilot-xxxxx-web", x: 305, y: 350 },
-  { name: "bcopilot-xxxxx-safety-eastus2", x: 305, y: 530 },
-  { name: "bcopilot-xxxxx-cosmos", x: 305, y: 660 },
-  { name: "bcopilot-copilot-api", x: 545, y: 350 },
-  { name: "bcopilot-mcp-bank", x: 725, y: 350, note: "ingress interno" },
-  { name: "bcopilot-products-api", x: 990, y: 350 },
-  { name: "bcopilot-customers-api", x: 1125, y: 350 },
-  { name: "bcopilot-xxxxx-apim", x: 920, y: 190 },
-  { name: "bcopilot-xxxxx-foundry", x: 625, y: 620 },
-  { name: "bcopilot-xxxxx-search", x: 805, y: 620 },
-  { name: "bcopilot-xxxxx-storage-events", x: 805, y: 785 },
-  { name: "bcopilotxxxxxst", x: 625, y: 785 },
-  { name: "bcopilot-xxxxx-ingest", x: 985, y: 785 },
-  { name: "bcopilot-xxxxx-kv", x: 560, y: 940 },
-  { name: "bcopilot-xxxxx-appi", x: 840, y: 940 },
-  { name: "bcopilot-xxxxx-logs", x: 980, y: 940 },
-  { name: "bcopilotxxxxxacr", x: 1120, y: 940 },
+// Icon centers. The left column is one region box and everything else the other.
+const LEFT_REGION: ResourceKey[] = ["web", "content-safety", "cosmos"];
+const NODES: { key: ResourceKey; x: number; y: number; note?: string }[] = [
+  { key: "web", x: 305, y: 350 },
+  { key: "content-safety", x: 305, y: 530 },
+  { key: "cosmos", x: 305, y: 660 },
+  { key: "copilot-api", x: 545, y: 350 },
+  { key: "mcp-bank", x: 725, y: 350, note: "ingress interno" },
+  { key: "products-api", x: 990, y: 350 },
+  { key: "customers-api", x: 1125, y: 350 },
+  { key: "apim", x: 920, y: 190 },
+  { key: "foundry", x: 625, y: 620 },
+  { key: "search", x: 805, y: 620 },
+  { key: "storage-events", x: 805, y: 785 },
+  { key: "storage", x: 625, y: 785 },
+  { key: "ingest", x: 985, y: 785 },
+  { key: "key-vault", x: 560, y: 940 },
+  { key: "app-insights", x: 840, y: 940 },
+  { key: "log-analytics", x: 980, y: 940 },
+  { key: "container-registry", x: 1120, y: 940 },
 ];
+
+// The layout draws two region boxes; a deployment that spreads differently would be drawn wrong.
+function regionLabels(deployment: Deployment): { left: string; right: string } {
+  const left = resourceByKey(deployment, "web").location;
+  const right = resourceByKey(deployment, "copilot-api").location;
+  for (const r of deployment.resources) {
+    const expected = LEFT_REGION.includes(r.key) ? left : right;
+    if (r.location !== expected) throw new Error(`diagram: ${r.key} is in ${r.location}, the layout expects ${expected}`);
+  }
+  return { left: resourceByKey(deployment, "web").regionLabel, right: resourceByKey(deployment, "copilot-api").regionLabel };
+}
 
 function Icon({ x, y, icon, size = ICON }: { x: number; y: number; icon: string; size?: number }) {
   return <image href={`/azure-icons/${icon}`} x={x - size / 2} y={y - size / 2} width={size} height={size} />;
@@ -79,10 +85,21 @@ function Highlight({ x, y, w, h }: { x: number; y: number; w: number; h: number 
   );
 }
 
-function ResourceNode({ name, x, y, note }: { name: string; x: number; y: number; note?: string }) {
-  const r = byName(name);
+function ResourceNode({
+  deployment,
+  r,
+  x,
+  y,
+  note,
+}: {
+  deployment: Deployment;
+  r: AzureResource;
+  x: number;
+  y: number;
+  note?: string;
+}) {
   return (
-    <PortalLink href={portalUrl(r.type, r.name)} label={`Abrir ${r.name} en el portal de Azure`}>
+    <PortalLink href={portalUrl(deployment, r)} label={`Abrir ${r.name} en el portal de Azure`}>
       <Highlight x={x - 75} y={y - 32} w={150} h={note ? 112 : 98} />
       <Icon x={x} y={y} icon={r.icon} />
       <NodeLabel x={x} y={y} title={r.service} sub={r.name} note={note} />
@@ -150,10 +167,11 @@ function Step({ x, y, label, ingest = false }: { x: number; y: number; label: st
   );
 }
 
-const GROUP_URL = `${RESOURCE_GROUP_URL}/overview`;
-
-export function ArchitectureDiagram() {
-  const env = byName("bcopilot-xxxxx-env");
+export function ArchitectureDiagram({ deployment }: { deployment: Deployment }) {
+  const env = resourceByKey(deployment, "container-apps-env");
+  const regions = regionLabels(deployment);
+  const group = deployment.resourceGroup;
+  const groupUrl = `${deployment.resourceGroupUrl}/overview`;
   return (
     <svg
       viewBox="0 0 1280 1050"
@@ -182,26 +200,26 @@ export function ArchitectureDiagram() {
       </text>
 
       <Boundary x={185} y={60} w={1060} h={964} stroke="#8091ad" />
-      <PortalLink href={GROUP_URL} label="Abrir el grupo de recursos bcopilot-rg en el portal de Azure">
+      <PortalLink href={groupUrl} label={`Abrir el grupo de recursos ${group} en el portal de Azure`}>
         <Highlight x={197} y={68} w={232} h={28} />
         <Icon x={213} y={82} icon="resource-group.svg" size={20} />
         <text x={229} y={87} fontSize={13} fontWeight={700} fill={INK}>
-          Grupo de recursos bcopilot-rg
+          Grupo de recursos {group}
         </text>
       </PortalLink>
 
       <Boundary x={205} y={104} w={200} h={620} stroke={REQUEST} dash="4 4" />
       <text x={221} y={128} fontSize={13} fontWeight={700} fill={REQUEST}>
-        Región East US 2
+        Región {regions.left}
       </text>
 
       <Boundary x={425} y={104} w={800} h={910} stroke={REQUEST} dash="4 4" />
       <text x={441} y={128} fontSize={13} fontWeight={700} fill={REQUEST}>
-        Región Canada East
+        Región {regions.right}
       </text>
 
       <Boundary x={445} y={255} w={760} h={225} stroke="#5b3cc4" />
-      <PortalLink href={portalUrl(env.type, env.name)} label={`Abrir ${env.name} en el portal de Azure`}>
+      <PortalLink href={portalUrl(deployment, env)} label={`Abrir ${env.name} en el portal de Azure`}>
         <Highlight x={453} y={259} w={236} h={40} />
         <Icon x={472} y={279} icon={env.icon} size={26} />
         <text x={492} y={276} fontSize={12.5} fontWeight={700} fill={INK}>
@@ -280,12 +298,12 @@ export function ArchitectureDiagram() {
         indexación
       </EdgeLabel>
 
-      {NODES.map((node) => (
-        <ResourceNode key={node.name} {...node} />
+      {NODES.map(({ key, ...position }) => (
+        <ResourceNode key={key} deployment={deployment} r={resourceByKey(deployment, key)} {...position} />
       ))}
 
       {/* The six user-assigned identities have no single portal page; the node opens the resource group. */}
-      <PortalLink href={GROUP_URL} label="Abrir las identidades administradas del grupo bcopilot-rg en el portal de Azure">
+      <PortalLink href={groupUrl} label={`Abrir las identidades administradas del grupo ${group} en el portal de Azure`}>
         <Highlight x={625} y={908} w={150} h={98} />
         <Icon x={700} y={940} icon="managed-identities.svg" />
         <NodeLabel x={700} y={940} title="Managed Identities" sub="6 asignadas por el usuario" />

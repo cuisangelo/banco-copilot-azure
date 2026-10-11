@@ -39,3 +39,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# deployed inventory for /documentacion (scripts/web_inventory.sh); never committed
+/app/documentacion/inventory.generated.json
