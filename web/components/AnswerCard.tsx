@@ -5,10 +5,10 @@ import type { ChatAnswer, ChatStatus, Citation, Claim } from "@/lib/types";
 import { CitationChip } from "./CitationChip";
 
 export const STATUS_TONE: Record<ChatStatus, { bar: string; pill: string; dot: string }> = {
-  ok: { bar: "border-t-ok", pill: "bg-ok/10 text-ok", dot: "bg-ok" },
+  ok: { bar: "border-t-ok", pill: "bg-ok/10 text-ok-ink", dot: "bg-ok" },
   clarification: { bar: "border-t-pending", pill: "bg-sky text-brand", dot: "bg-brand" },
   insufficient: { bar: "border-t-insufficient", pill: "bg-insufficient/10 text-insufficient", dot: "bg-insufficient" },
-  contradiction: { bar: "border-t-contradiction", pill: "bg-contradiction/10 text-contradiction", dot: "bg-contradiction" },
+  contradiction: { bar: "border-t-contradiction", pill: "bg-contradiction/10 text-contradiction-ink", dot: "bg-contradiction" },
   rejected: { bar: "border-t-reject", pill: "bg-reject/10 text-reject", dot: "bg-reject" },
   access_required: { bar: "border-t-access", pill: "bg-access/10 text-access", dot: "bg-access" },
 };

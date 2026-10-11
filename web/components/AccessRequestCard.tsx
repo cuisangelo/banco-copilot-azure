@@ -75,7 +75,7 @@ export function AccessRequestCard({ request: initial, token, onDecided, onUnauth
             <li
               key={field}
               className={`rounded-lg px-2.5 py-1 text-sm ${
-                !decided ? "bg-white ring-1 ring-line" : approved ? "bg-ok/10 text-ok" : "bg-reject/10 text-reject"
+                !decided ? "bg-white ring-1 ring-line" : approved ? "bg-ok/10 text-ok-ink" : "bg-reject/10 text-reject"
               }`}
             >
               <span className="font-semibold">{FIELD_LABEL[field]}</span>

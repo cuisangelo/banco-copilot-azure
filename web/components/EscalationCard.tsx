@@ -33,7 +33,7 @@ export function EscalationCard({ draft, token, onUnauthorized }: Props) {
 
   return (
     <section className="rounded-xl border border-contradiction/30 bg-contradiction/[0.05] p-4">
-      <h3 className="flex items-center gap-2 font-display text-sm font-bold text-contradiction">
+      <h3 className="flex items-center gap-2 font-display text-sm font-bold text-contradiction-ink">
         <FlagIcon className="size-4" />
         Borrador de escalamiento
       </h3>

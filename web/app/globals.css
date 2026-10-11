@@ -12,7 +12,10 @@
   --color-canvas: #f4f7fc;
 
   --color-ok: #1e8e3e;
+  /* Status hues below 4.5:1 as text get a darker ink for labels; the hue stays on bars and dots. */
+  --color-ok-ink: #176f30;
   --color-contradiction: #b26a00;
+  --color-contradiction-ink: #8a5200;
   --color-reject: #c62828;
   --color-access: #5b3cc4;
   --color-pending: #0047bb;
