@@ -1,0 +1,49 @@
+@import "tailwindcss";
+
+@theme {
+  --color-navy: #002a6e;
+  --color-brand: #0047bb;
+  --color-brand-hover: #003a9c;
+  --color-sky: #e8f0fe;
+  --color-cyan: #00a3e0;
+  --color-ink: #14213d;
+  --color-muted: #55657f;
+  --color-line: #d9e2ef;
+  --color-canvas: #f4f7fc;
+
+  --color-ok: #1e8e3e;
+  /* Status hues below 4.5:1 as text get a darker ink for labels; the hue stays on bars and dots. */
+  --color-ok-ink: #176f30;
+  --color-contradiction: #b26a00;
+  --color-contradiction-ink: #8a5200;
+  --color-reject: #c62828;
+  --color-access: #5b3cc4;
+  --color-pending: #0047bb;
+  --color-insufficient: #55657f;
+
+  --font-display: var(--font-montserrat);
+  --font-sans: var(--font-source-sans);
+
+  --shadow-soft: 0 1px 2px rgb(0 42 110 / 0.06), 0 6px 20px -8px rgb(0 42 110 / 0.14);
+  --shadow-lift: 0 2px 4px rgb(0 42 110 / 0.08), 0 18px 40px -12px rgb(0 42 110 / 0.28);
+}
+
+body {
+  background: var(--color-canvas);
+  color: var(--color-ink);
+}
+
+:focus-visible {
+  outline: 3px solid var(--color-cyan);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
