@@ -1,7 +1,7 @@
 from copilot_api.store import InMemoryStore
 from copilot_api.workflow.llm import Llm
 from copilot_api.workflow.turn import Services
-from fakes import FakeChatClient, FakeRetriever, FakeSafety
+from fakes import FakeBank, FakeChatClient, FakeRetriever, FakeSafety
 
 
 def make_services(**overrides) -> Services:
@@ -10,5 +10,6 @@ def make_services(**overrides) -> Services:
         "safety": FakeSafety(),
         "store": InMemoryStore(),
         "retriever": FakeRetriever([]),
+        "bank": FakeBank(),
     }
     return Services(**{**defaults, **overrides})

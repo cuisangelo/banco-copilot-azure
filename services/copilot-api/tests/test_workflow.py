@@ -4,18 +4,24 @@ from pydantic import ValidationError
 
 from copilot_api.store import InMemoryStore
 from copilot_api.workflow.graph import build_workflow
+from copilot_api.workflow.customer import CustomerPlan
 from copilot_api.workflow.llm import Llm
+from copilot_api.workflow.products import ProductCall, ProductPlan
 from copilot_api.workflow.rag import Chunk
 from copilot_api.workflow.router import RouteDecision
 from copilot_api.workflow.turn import Turn, TurnResult
-from fakes import FakeChatClient, FakeRetriever, FakeSafety
+from fakes import FakeBank, FakeChatClient, FakeRetriever, FakeSafety
 from wiring import make_services
 
 
-async def run_turn(services, message: str, **fields):
+async def run_turn(services, message: str, *, actor: str | None = None, customer_id: str | None = None):
     workflow = build_workflow(services, InMemoryCheckpointStorage())
-    turn = Turn(session_id="s-1", message=message, customer_id=None, actor=None, history=[], **fields)
+    turn = Turn(session_id="s-1", message=message, customer_id=customer_id, actor=actor, history=[])
     return [event async for event in workflow.run(turn, stream=True)]
+
+
+def scripted(*entries) -> Llm:
+    return Llm(FakeChatClient({type(entry): entry for entry in entries}), model="gpt-4.1-mini")
 
 
 def answer_of(events):
@@ -93,3 +99,61 @@ async def test_injected_chunk_is_dropped_before_the_prompt():
 
     assert answer.status == "insufficient"
     assert [entry["layer"] for entry in store.audit_log] == ["prompt_shields_documents"]
+
+
+INCOME_AND_DEBT = CustomerPlan(
+    fields=["monthly_income", "current_debt"], purpose="Evaluar si cumple los requisitos del crédito hipotecario"
+)
+
+
+async def test_denied_fields_require_access_for_exactly_those_fields():
+    bank, store = FakeBank(), InMemoryStore()
+    bank.actor = "ana"
+    services = make_services(
+        llm=scripted(route("customer", customer_id="C-1001"), INCOME_AND_DEBT), bank=bank, store=store
+    )
+
+    events = await run_turn(services, "¿C-1001 cumple para el hipotecario?", actor="ana")
+
+    answer = answer_of(events)
+    assert answer.status == "access_required"
+    request = answer.access_request
+    assert (request.customer_id, request.fields, request.requested_by, request.status) == (
+        "C-1001",
+        ["monthly_income", "current_debt"],
+        "ana",
+        "pending",
+    )
+    assert await store.get_access_request(request.id) == request
+    assert [event.request_id for event in events if event.type == "request_info"] == [request.id]
+
+
+async def test_invented_customer_id_is_insufficient_without_raising():
+    bank = FakeBank()
+    bank.actor = "ana"
+    services = make_services(llm=scripted(route("customer", customer_id="C-9999"), INCOME_AND_DEBT), bank=bank)
+
+    events = await run_turn(services, "¿C-9999 cumple para el hipotecario?", actor="ana")
+
+    assert answer_of(events).status == "insufficient"
+    assert not [event for event in events if event.type in ("failed", "executor_failed")]
+
+
+async def test_customer_data_needs_a_persona():
+    bank = FakeBank()
+    services = make_services(llm=scripted(route("customer", customer_id="C-1001"), INCOME_AND_DEBT), bank=bank)
+
+    answer = answer_of(await run_turn(services, "¿C-1001 cumple para el hipotecario?"))
+
+    assert answer.status == "insufficient"
+    assert bank.calls == []
+
+
+async def test_tool_calls_are_capped_at_five_per_turn():
+    bank = FakeBank()
+    plan = ProductPlan(calls=[ProductCall(tool="get_product", product_id="TC-ORO")] * 7)
+    services = make_services(llm=scripted(route("product"), plan), bank=bank)
+
+    await run_turn(services, "¿mantención de la tarjeta Oro?")
+
+    assert len(bank.calls) == 5

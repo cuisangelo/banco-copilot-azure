@@ -3,7 +3,10 @@ from collections.abc import Callable
 from typing import Any
 
 from agent_framework import ChatResponse, Message
+from bank_contracts.models import CustomerFields, CustomerProfile, FieldsDenied, Product
 from pydantic import BaseModel
+
+from copilot_api.mcp_bank import ToolFailed
 
 
 class FakeChatClient:
@@ -43,6 +46,73 @@ class FakeSafety:
 
     async def ungrounded(self, text: str, sources: list[str]) -> bool:
         return self._ungrounded
+
+
+PROFILES = {
+    "C-1001": CustomerProfile(
+        customer_id="C-1001", segment="personas", income_type="dependiente", products=["CTA-SUELDO"], customer_tenure_months=40
+    ),
+    "C-1002": CustomerProfile(
+        customer_id="C-1002", segment="preferente", income_type="independiente", products=["TC-ORO"], customer_tenure_months=12
+    ),
+}
+LEVEL2_VALUES = {
+    "C-1001": {"monthly_income": 1_850_000, "current_debt": 420_000, "payment_behavior": "al_dia", "employment_tenure_months": 18},
+    "C-1002": {"monthly_income": 2_730_000, "current_debt": 0, "payment_behavior": "atraso_30", "employment_tenure_months": 7},
+}
+PRODUCTS = {
+    "TC-ORO": Product(
+        id="TC-ORO", name="Tarjeta Oro", category="credit_card", annual_rate_pct=28.5, monthly_fee_clp=4500,
+        requirements=["Renta líquida mínima de $800.000"], valid_from="2026-01-01",
+    ),
+    "TC-PLATINUM": Product(
+        id="TC-PLATINUM", name="Tarjeta Platinum", category="credit_card", annual_rate_pct=26.0, monthly_fee_clp=7900,
+        requirements=["Renta líquida mínima de $1.500.000"], valid_from="2026-01-01",
+    ),
+}
+
+
+class FakeBank:
+    """mcp-bank stand-in; `grants` plays customers-api's live grants: {(advisor, customer): {fields}}."""
+
+    def __init__(self) -> None:
+        self.grants: dict[tuple[str, str], set[str]] = {}
+        self.calls: list[tuple[str, dict]] = []
+        self.actor: str | None = None
+
+    async def get_product(self, product_id: str) -> Product:
+        self.calls.append(("get_product", {"product_id": product_id}))
+        if product_id not in PRODUCTS:
+            raise ToolFailed("product not found")
+        return PRODUCTS[product_id]
+
+    async def list_products(self, category: str | None) -> list[Product]:
+        self.calls.append(("list_products", {"category": category}))
+        return [product for product in PRODUCTS.values() if category in (None, product.category)]
+
+    async def compare_products(self, product_ids: list[str]) -> list[Product]:
+        self.calls.append(("compare_products", {"product_ids": product_ids}))
+        return [PRODUCTS[product_id] for product_id in product_ids]
+
+    async def get_customer_profile(self, customer_id: str) -> CustomerProfile:
+        self.calls.append(("get_customer_profile", {"customer_id": customer_id}))
+        if customer_id not in PROFILES:
+            raise ToolFailed("customer not found")
+        return PROFILES[customer_id]
+
+    async def get_customer_fields(self, customer_id: str, fields: list[str]) -> CustomerFields | FieldsDenied:
+        self.calls.append(("get_customer_fields", {"customer_id": customer_id, "fields": list(fields)}))
+        if customer_id not in PROFILES:
+            raise ToolFailed("customer not found")
+        granted = self.grants.get((self.actor, customer_id), set())
+        denied = [field for field in fields if field not in granted]
+        if denied:
+            return FieldsDenied(customer_id=customer_id, denied_fields=denied)
+        return CustomerFields(
+            customer_id=customer_id,
+            values={field: LEVEL2_VALUES[customer_id][field] for field in fields},
+            grant_id=f"g-{customer_id}",
+        )
 
 
 class FakeRetriever:
