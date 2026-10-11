@@ -8,7 +8,10 @@ from copilot_api.workflow.agentic import (
     KNOWLEDGE_BASE,
     KNOWLEDGE_SOURCE,
     AgenticRetriever,
+    knowledge_base_definition,
+    knowledge_source_definition,
 )
+from copilot_api.workflow.rag import Chunk
 
 ENDPOINT = "https://search.example"
 
@@ -122,3 +125,31 @@ async def test_retrieve_asks_the_knowledge_base_to_plan_over_bank_docs():
 async def test_anything_but_a_complete_retrieval_fails_loud(status):
     with pytest.raises(httpx.HTTPStatusError):
         await retriever_answering(status, PLANNED_RESPONSE, []).search("¿Oro o Platinum?", top=8)
+
+
+def test_knowledge_source_returns_every_field_a_chunk_is_built_from():
+    definition = knowledge_source_definition("bank-docs")
+
+    assert (definition["name"], definition["kind"]) == (KNOWLEDGE_SOURCE, "searchIndex")
+    parameters = definition["searchIndexParameters"]
+    assert parameters["searchIndexName"] == "bank-docs"
+    assert parameters["semanticConfigurationName"] == "default"
+    assert {field["name"] for field in parameters["sourceDataFields"]} == set(Chunk.model_fields) - {"reranker_score"}
+
+
+def test_knowledge_base_plans_with_the_chat_deployment_and_no_key():
+    definition = knowledge_base_definition("https://aoai.example", "gpt-4.1-mini")
+
+    assert definition["name"] == KNOWLEDGE_BASE
+    assert definition["knowledgeSources"] == [{"name": KNOWLEDGE_SOURCE}]
+    assert definition["models"] == [
+        {
+            "kind": "azureOpenAI",
+            "azureOpenAIParameters": {
+                "resourceUri": "https://aoai.example",
+                "deploymentId": "gpt-4.1-mini",
+                "modelName": "gpt-4.1-mini",
+            },
+        }
+    ]
+    assert "apiKey" not in json.dumps(definition)

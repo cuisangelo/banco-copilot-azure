@@ -12,6 +12,37 @@ AGENTIC_API_VERSION = "2026-08-01-preview"
 KNOWLEDGE_SOURCE = "bank-docs-ks"
 KNOWLEDGE_BASE = "bank-docs-kb"
 SEARCH_SCOPE = "https://search.azure.com/.default"
+# Every Chunk field except the score, which the reference carries outside sourceData.
+SOURCE_DATA_FIELDS = ("id", "doc_id", "doc_title", "section", "content")
+
+
+def knowledge_source_definition(index: str) -> dict:
+    return {
+        "name": KNOWLEDGE_SOURCE,
+        "kind": "searchIndex",
+        "searchIndexParameters": {
+            "searchIndexName": index,
+            "sourceDataFields": [{"name": name} for name in SOURCE_DATA_FIELDS],
+            "semanticConfigurationName": "default",
+        },
+    }
+
+
+def knowledge_base_definition(openai_endpoint: str, deployment: str) -> dict:
+    """The planner calls the chat deployment as the search service's managed identity, never with a key."""
+    return {
+        "name": KNOWLEDGE_BASE,
+        "knowledgeSources": [{"name": KNOWLEDGE_SOURCE}],
+        "models": [
+            {
+                "kind": "azureOpenAI",
+                # Deployments are named after their model, as gpt-4.1-mini is.
+                "azureOpenAIParameters": {"resourceUri": openai_endpoint, "deploymentId": deployment, "modelName": deployment},
+            }
+        ],
+        "outputMode": "extractiveData",
+        "retrievalReasoningEffort": {"kind": "low"},
+    }
 
 
 class AgenticRetriever:
