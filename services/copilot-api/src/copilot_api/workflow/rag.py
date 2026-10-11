@@ -13,9 +13,10 @@ from copilot_api.workflow.turn import Services, Turn
 
 TOP_K = 5
 RERANKER_THRESHOLD = 1.5
-# customer is searched too: "does this customer qualify" needs the bank's rules, and the router
-# labels those questions customer instead of mixed often enough that the prompt alone can't fix it.
-DOC_ROUTES = ("procedure", "mixed", "customer")
+# Every answering route searches: product sheets carry benefits the products API lacks, and "does
+# this customer qualify" needs the bank's rules even when the router labels it customer, not mixed.
+# Only procedure turns stop on an empty search; the others still have API data to answer from.
+DOC_ROUTES = ("procedure", "mixed", "customer", "product")
 
 NOT_FOUND_MESSAGE = "No lo encuentro en la documentación vigente. Puedo ayudarte a escalar la consulta."
 
