@@ -1,3 +1,5 @@
+import json
+
 import httpx
 import pytest
 
@@ -102,7 +104,20 @@ async def test_groundedness_reports_ungrounded_text():
         assert request.url.path == "/contentsafety/text:detectGroundedness"
         return httpx.Response(200, json={"ungroundedDetected": True, "ungroundedPercentage": 0.4})
 
-    assert await _safety(responder).ungrounded("respuesta", ["fuente"]) is True
+    assert await _safety(responder).ungrounded("respuesta", ["fuente"], query="pregunta") is True
+
+
+async def test_groundedness_judges_the_answer_against_the_advisor_question():
+    seen = {}
+
+    def responder(request: httpx.Request) -> httpx.Response:
+        seen.update(json.loads(request.content))
+        return httpx.Response(200, json={"ungroundedDetected": False, "ungroundedPercentage": 0})
+
+    await _safety(responder).ungrounded("Cumple según la ficha.", ["mínimo 12 meses"], query="¿Cumple la antigüedad?")
+
+    assert seen["task"] == "QnA"
+    assert seen["qna"] == {"query": "¿Cumple la antigüedad?"}
 
 
 async def test_content_safety_errors_surface():

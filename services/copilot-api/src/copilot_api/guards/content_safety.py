@@ -43,10 +43,12 @@ class ContentSafety:
         )
         return [analysis["attackDetected"] for analysis in result["documentsAnalysis"]]
 
-    async def ungrounded(self, text: str, sources: list[str]) -> bool:
+    async def ungrounded(self, text: str, sources: list[str], *, query: str) -> bool:
+        # QnA, not Summarization: an answer draws conclusions ("cumple según la ficha") that
+        # Summarization flags as ungrounded even when every premise is in the sources.
         result = await self._post(
             "detectGroundedness",
             GROUNDEDNESS_API_VERSION,
-            {"domain": "Generic", "task": "Summarization", "text": text, "groundingSources": sources},
+            {"domain": "Generic", "task": "QnA", "qna": {"query": query}, "text": text, "groundingSources": sources},
         )
         return result["ungroundedDetected"]

@@ -70,7 +70,9 @@ class Verifier(Executor):
         claims = composed.requirements + composed.steps
         known = {citation.id for citation in turn.citations}
         text = "\n".join([composed.message, *(claim.text for claim in claims)])
-        ungrounded = await self._services.safety.ungrounded(text, [citation.snippet for citation in turn.citations])
+        ungrounded = await self._services.safety.ungrounded(
+            text, [citation.snippet for citation in turn.citations], query=turn.message
+        )
         uncited = [claim.text for claim in claims if not claim.citation_ids or not set(claim.citation_ids) <= known]
         conflict = None if ungrounded or uncited else find_contradiction(claims)
         await emit_trace(
