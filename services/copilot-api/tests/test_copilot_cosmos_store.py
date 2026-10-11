@@ -17,7 +17,7 @@ from copilot_api.workflow.graph import build_workflow
 from copilot_api.workflow.llm import Llm
 from copilot_api.workflow.turn import HistoryEntry, Turn, TurnResult
 from fakes import FakeBank
-from test_routes import customer_script
+from test_copilot_routes import customer_script
 from wiring import make_services
 
 EMULATOR = os.environ.get("COSMOS_EMULATOR_ENDPOINT")

@@ -13,8 +13,8 @@ from copilot_api.workflow.customer import CustomerPlan
 from copilot_api.workflow.products import ProductCall, ProductPlan
 from copilot_api.workflow.router import RouteDecision
 from fakes import FakeChatClient, FakeRetriever, FakeSafety
-from test_mcp_bank import build_server
-from test_workflow import CIRCULAR, FICHA
+from test_copilot_mcp_adapter import build_server
+from test_copilot_workflow import CIRCULAR, FICHA
 from wiring import make_deps
 
 INCOME = "1850000"
