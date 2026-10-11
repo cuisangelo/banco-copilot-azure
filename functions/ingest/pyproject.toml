@@ -1,0 +1,23 @@
+[project]
+name = "bank-ingest"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "bank-contracts",
+    "azure-functions",
+    "azure-identity",
+    "azure-search-documents",
+    "openai",
+]
+
+[tool.uv.sources]
+bank-contracts = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+# Azure Functions expects function_app.py and its sibling modules at the app root, so the
+# modules stay flat instead of living in a package.
+[tool.hatch.build.targets.wheel]
+only-include = ["chunker.py", "index_schema.py", "indexer.py", "function_app.py"]
