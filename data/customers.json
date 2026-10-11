@@ -1,0 +1,282 @@
+[
+  {
+    "customer_id": "C-1001",
+    "segment": "personas",
+    "income_type": "dependiente",
+    "products": [
+      "CTA-SUELDO",
+      "TC-CLASICA"
+    ],
+    "customer_tenure_months": 26,
+    "monthly_income": 780000,
+    "current_debt": 1250000,
+    "payment_behavior": "al_dia",
+    "employment_tenure_months": 34
+  },
+  {
+    "customer_id": "C-1002",
+    "segment": "personas",
+    "income_type": "dependiente",
+    "products": [
+      "CTA-SUELDO"
+    ],
+    "customer_tenure_months": 8,
+    "monthly_income": 520000,
+    "current_debt": 0,
+    "payment_behavior": "al_dia",
+    "employment_tenure_months": 9
+  },
+  {
+    "customer_id": "C-1003",
+    "segment": "preferente",
+    "income_type": "dependiente",
+    "products": [
+      "CTA-CORRIENTE",
+      "TC-ORO",
+      "LINEA-CREDITO"
+    ],
+    "customer_tenure_months": 64,
+    "monthly_income": 1950000,
+    "current_debt": 6800000,
+    "payment_behavior": "al_dia",
+    "employment_tenure_months": 52
+  },
+  {
+    "customer_id": "C-1004",
+    "segment": "personas",
+    "income_type": "independiente",
+    "products": [
+      "TC-CLASICA"
+    ],
+    "customer_tenure_months": 15,
+    "monthly_income": 690000,
+    "current_debt": 2100000,
+    "payment_behavior": "atraso_30",
+    "employment_tenure_months": 30
+  },
+  {
+    "customer_id": "C-1005",
+    "segment": "preferente",
+    "income_type": "dependiente",
+    "products": [
+      "CTA-CORRIENTE",
+      "TC-PLATINUM",
+      "CRED-HIPOTECARIO"
+    ],
+    "customer_tenure_months": 120,
+    "monthly_income": 3400000,
+    "current_debt": 98500000,
+    "payment_behavior": "al_dia",
+    "employment_tenure_months": 96
+  },
+  {
+    "customer_id": "C-1006",
+    "segment": "pyme",
+    "income_type": "independiente",
+    "products": [
+      "CTA-CORRIENTE",
+      "LINEA-CREDITO"
+    ],
+    "customer_tenure_months": 48,
+    "monthly_income": 2600000,
+    "current_debt": 14300000,
+    "payment_behavior": "al_dia",
+    "employment_tenure_months": 60
+  },
+  {
+    "customer_id": "C-1007",
+    "segment": "preferente",
+    "income_type": "dependiente",
+    "products": [
+      "CTA-CORRIENTE",
+      "TC-ORO"
+    ],
+    "customer_tenure_months": 22,
+    "monthly_income": 2350000,
+    "current_debt": 4800000,
+    "payment_behavior": "al_dia",
+    "employment_tenure_months": 18
+  },
+  {
+    "customer_id": "C-1008",
+    "segment": "personas",
+    "income_type": "dependiente",
+    "products": [
+      "CTA-SUELDO",
+      "CRED-CONSUMO"
+    ],
+    "customer_tenure_months": 37,
+    "monthly_income": 610000,
+    "current_debt": 3900000,
+    "payment_behavior": "atraso_30",
+    "employment_tenure_months": 28
+  },
+  {
+    "customer_id": "C-1009",
+    "segment": "personas",
+    "income_type": "dependiente",
+    "products": [
+      "CTA-SUELDO",
+      "TC-CLASICA"
+    ],
+    "customer_tenure_months": 12,
+    "monthly_income": 940000,
+    "current_debt": 850000,
+    "payment_behavior": "al_dia",
+    "employment_tenure_months": 14
+  },
+  {
+    "customer_id": "C-1010",
+    "segment": "pyme",
+    "income_type": "independiente",
+    "products": [
+      "CTA-CORRIENTE"
+    ],
+    "customer_tenure_months": 30,
+    "monthly_income": 1750000,
+    "current_debt": 5200000,
+    "payment_behavior": "al_dia",
+    "employment_tenure_months": 41
+  },
+  {
+    "customer_id": "C-1011",
+    "segment": "personas",
+    "income_type": "independiente",
+    "products": [],
+    "customer_tenure_months": 3,
+    "monthly_income": 450000,
+    "current_debt": 0,
+    "payment_behavior": "al_dia",
+    "employment_tenure_months": 11
+  },
+  {
+    "customer_id": "C-1012",
+    "segment": "preferente",
+    "income_type": "independiente",
+    "products": [
+      "CTA-CORRIENTE",
+      "TC-PLATINUM",
+      "LINEA-CREDITO"
+    ],
+    "customer_tenure_months": 88,
+    "monthly_income": 4100000,
+    "current_debt": 12600000,
+    "payment_behavior": "al_dia",
+    "employment_tenure_months": 102
+  },
+  {
+    "customer_id": "C-1013",
+    "segment": "personas",
+    "income_type": "dependiente",
+    "products": [
+      "CTA-SUELDO",
+      "TC-CLASICA",
+      "CRED-CONSUMO"
+    ],
+    "customer_tenure_months": 44,
+    "monthly_income": 720000,
+    "current_debt": 6100000,
+    "payment_behavior": "atraso_90",
+    "employment_tenure_months": 19
+  },
+  {
+    "customer_id": "C-1014",
+    "segment": "personas",
+    "income_type": "dependiente",
+    "products": [
+      "CTA-SUELDO"
+    ],
+    "customer_tenure_months": 5,
+    "monthly_income": 1300000,
+    "current_debt": 0,
+    "payment_behavior": "al_dia",
+    "employment_tenure_months": 7
+  },
+  {
+    "customer_id": "C-1015",
+    "segment": "preferente",
+    "income_type": "dependiente",
+    "products": [
+      "CTA-CORRIENTE",
+      "TC-ORO",
+      "CRED-CONSUMO"
+    ],
+    "customer_tenure_months": 53,
+    "monthly_income": 1480000,
+    "current_debt": 9700000,
+    "payment_behavior": "al_dia",
+    "employment_tenure_months": 30
+  },
+  {
+    "customer_id": "C-1016",
+    "segment": "pyme",
+    "income_type": "independiente",
+    "products": [
+      "CTA-CORRIENTE",
+      "LINEA-CREDITO",
+      "TC-ORO"
+    ],
+    "customer_tenure_months": 71,
+    "monthly_income": 3050000,
+    "current_debt": 22400000,
+    "payment_behavior": "atraso_30",
+    "employment_tenure_months": 84
+  },
+  {
+    "customer_id": "C-1017",
+    "segment": "personas",
+    "income_type": "dependiente",
+    "products": [
+      "CTA-SUELDO",
+      "TC-CLASICA"
+    ],
+    "customer_tenure_months": 19,
+    "monthly_income": 560000,
+    "current_debt": 1400000,
+    "payment_behavior": "al_dia",
+    "employment_tenure_months": 22
+  },
+  {
+    "customer_id": "C-1018",
+    "segment": "preferente",
+    "income_type": "dependiente",
+    "products": [
+      "CTA-CORRIENTE",
+      "TC-PLATINUM"
+    ],
+    "customer_tenure_months": 9,
+    "monthly_income": 2900000,
+    "current_debt": 3300000,
+    "payment_behavior": "al_dia",
+    "employment_tenure_months": 15
+  },
+  {
+    "customer_id": "C-1019",
+    "segment": "personas",
+    "income_type": "independiente",
+    "products": [
+      "TC-CLASICA",
+      "CRED-CONSUMO"
+    ],
+    "customer_tenure_months": 27,
+    "monthly_income": 830000,
+    "current_debt": 4500000,
+    "payment_behavior": "atraso_90",
+    "employment_tenure_months": 36
+  },
+  {
+    "customer_id": "C-1020",
+    "segment": "preferente",
+    "income_type": "dependiente",
+    "products": [
+      "CTA-CORRIENTE",
+      "CRED-HIPOTECARIO",
+      "TC-ORO"
+    ],
+    "customer_tenure_months": 140,
+    "monthly_income": 2750000,
+    "current_debt": 71200000,
+    "payment_behavior": "al_dia",
+    "employment_tenure_months": 130
+  }
+]

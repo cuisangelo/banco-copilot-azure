@@ -1,0 +1,119 @@
+[
+  {
+    "id": "CTA-CORRIENTE",
+    "name": "Cuenta Corriente Austral",
+    "category": "account",
+    "annual_rate_pct": null,
+    "monthly_fee_clp": 6490,
+    "requirements": [
+      "Ser mayor de 18 años",
+      "Cédula de identidad vigente",
+      "Renta líquida mensual mínima de $600.000",
+      "Acreditación de renta según tipo de trabajador",
+      "Sin morosidades vigentes en el sistema financiero"
+    ],
+    "valid_from": "2026-01-15"
+  },
+  {
+    "id": "CTA-SUELDO",
+    "name": "Cuenta Sueldo Austral",
+    "category": "account",
+    "annual_rate_pct": null,
+    "monthly_fee_clp": 0,
+    "requirements": [
+      "Ser trabajador dependiente",
+      "Cédula de identidad vigente",
+      "Empleador con convenio de pago de remuneraciones vigente con Banco Austral",
+      "Última liquidación de sueldo o contrato de trabajo"
+    ],
+    "valid_from": "2026-02-01"
+  },
+  {
+    "id": "TC-CLASICA",
+    "name": "Tarjeta de Crédito Austral Clásica",
+    "category": "credit_card",
+    "annual_rate_pct": 34.8,
+    "monthly_fee_clp": 2990,
+    "requirements": [
+      "Ser mayor de 18 años",
+      "Cédula de identidad vigente",
+      "Renta líquida mensual mínima de $450.000",
+      "Sin morosidades vigentes en el sistema financiero"
+    ],
+    "valid_from": "2026-03-01"
+  },
+  {
+    "id": "TC-ORO",
+    "name": "Tarjeta de Crédito Austral Oro",
+    "category": "credit_card",
+    "annual_rate_pct": 32.4,
+    "monthly_fee_clp": 4990,
+    "requirements": [
+      "Ser mayor de 21 años",
+      "Cédula de identidad vigente",
+      "Renta líquida mensual mínima de $900.000",
+      "Sin morosidades vigentes en el sistema financiero"
+    ],
+    "valid_from": "2026-03-01"
+  },
+  {
+    "id": "TC-PLATINUM",
+    "name": "Tarjeta de Crédito Austral Platinum",
+    "category": "credit_card",
+    "annual_rate_pct": 28.8,
+    "monthly_fee_clp": 9990,
+    "requirements": [
+      "Ser mayor de 25 años",
+      "Cédula de identidad vigente",
+      "Renta líquida mensual mínima de $1.800.000",
+      "Antigüedad como cliente del banco de al menos 6 meses",
+      "Comportamiento de pago al día en los últimos 12 meses"
+    ],
+    "valid_from": "2026-03-01"
+  },
+  {
+    "id": "CRED-CONSUMO",
+    "name": "Crédito de Consumo Austral",
+    "category": "consumer_loan",
+    "annual_rate_pct": 22.8,
+    "monthly_fee_clp": null,
+    "requirements": [
+      "Edad entre 18 y 75 años",
+      "Cédula de identidad vigente",
+      "Renta líquida mensual mínima de $400.000",
+      "Dependientes: 6 meses de antigüedad laboral y 3 últimas liquidaciones de sueldo",
+      "Independientes: 12 meses de boletas de honorarios o declaración anual de impuestos",
+      "Carga financiera total no superior al 50% de la renta líquida"
+    ],
+    "valid_from": "2026-04-01"
+  },
+  {
+    "id": "CRED-HIPOTECARIO",
+    "name": "Crédito Hipotecario Austral",
+    "category": "mortgage",
+    "annual_rate_pct": 4.39,
+    "monthly_fee_clp": null,
+    "requirements": [
+      "Edad entre 23 y 70 años",
+      "Renta líquida mensual mínima de $1.200.000",
+      "Dependientes: antigüedad laboral mínima de 12 meses con el empleador actual",
+      "Independientes: dos últimas declaraciones anuales de impuestos",
+      "Pie mínimo de 20% del valor de la propiedad",
+      "Dividendo no superior al 25% de la renta líquida"
+    ],
+    "valid_from": "2026-03-01"
+  },
+  {
+    "id": "LINEA-CREDITO",
+    "name": "Línea de Crédito Austral",
+    "category": "consumer_loan",
+    "annual_rate_pct": 27.6,
+    "monthly_fee_clp": 1990,
+    "requirements": [
+      "Tener Cuenta Corriente Austral vigente",
+      "Renta líquida mensual mínima de $600.000",
+      "Sin morosidades vigentes en el sistema financiero"
+    ],
+    "valid_from": "2026-01-15"
+  }
+]
