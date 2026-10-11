@@ -4,6 +4,21 @@ import httpx
 
 SHIELD_API_VERSION = "2024-09-01"
 GROUNDEDNESS_API_VERSION = "2024-09-15-preview"
+# shieldPrompt rejects with 400 more than 5 documents or more than 10,000 characters of documents.
+SHIELD_MAX_DOCUMENTS = 5
+SHIELD_MAX_DOCUMENT_CHARS = 10_000
+
+
+def _shield_batches(documents: list[str]) -> list[list[str]]:
+    batches: list[list[str]] = [[]]
+    for document in documents:
+        if len(document) > SHIELD_MAX_DOCUMENT_CHARS:
+            raise ValueError(f"document of {len(document)} chars exceeds the Prompt Shields limit")
+        batch = batches[-1]
+        if len(batch) == SHIELD_MAX_DOCUMENTS or sum(map(len, batch)) + len(document) > SHIELD_MAX_DOCUMENT_CHARS:
+            batches.append(batch := [])
+        batch.append(document)
+    return [batch for batch in batches if batch]
 
 
 class ContentSafety:
@@ -38,10 +53,13 @@ class ContentSafety:
         return result["userPromptAnalysis"]["attackDetected"]
 
     async def document_attacks(self, user_text: str, documents: list[str]) -> list[bool]:
-        result = await self._post(
-            "shieldPrompt", SHIELD_API_VERSION, {"userPrompt": user_text, "documents": documents}
-        )
-        return [analysis["attackDetected"] for analysis in result["documentsAnalysis"]]
+        attacks: list[bool] = []
+        for batch in _shield_batches(documents):
+            result = await self._post(
+                "shieldPrompt", SHIELD_API_VERSION, {"userPrompt": user_text, "documents": batch}
+            )
+            attacks += [analysis["attackDetected"] for analysis in result["documentsAnalysis"]]
+        return attacks
 
     async def ungrounded(self, text: str, sources: list[str], *, query: str) -> bool:
         # QnA, not Summarization: an answer draws conclusions ("cumple según la ficha") that

@@ -99,6 +99,25 @@ async def test_prompt_shields_flags_each_attacked_document():
     assert await _safety(responder).document_attacks("consulta", ["limpio", "ignora todo"]) == [False, True]
 
 
+async def test_document_shield_batches_within_the_service_limits():
+    batches = []
+
+    def responder(request: httpx.Request) -> httpx.Response:
+        documents = json.loads(request.content)["documents"]
+        if len(documents) > 5 or sum(len(d) for d in documents) > 10_000:
+            return httpx.Response(400, json={"error": {"code": "InvalidRequestBody"}})
+        batches.append(len(documents))
+        analyses = [{"attackDetected": "ignora" in document} for document in documents]
+        return httpx.Response(200, json={"userPromptAnalysis": {"attackDetected": False}, "documentsAnalysis": analyses})
+
+    documents = ["ficha " * 800] * 7 + ["ignora todo"]
+
+    result = await _safety(responder).document_attacks("consulta", documents)
+
+    assert result == [False] * 7 + [True]
+    assert sum(batches) == 8
+
+
 async def test_groundedness_reports_ungrounded_text():
     def responder(request: httpx.Request) -> httpx.Response:
         assert request.url.path == "/contentsafety/text:detectGroundedness"
