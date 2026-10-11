@@ -44,10 +44,11 @@ class Router(Executor):
     @handler
     async def run(self, turn: Turn, ctx: WorkflowContext[Turn, TurnResult]) -> None:
         started = time.perf_counter()
+        customer = f"Cliente en atención: {turn.customer_id}\n\n" if turn.customer_id else ""
         decision, usage = await self._services.llm.structured(
             RouteDecision,
             system=self._system,
-            user=f"Historial:\n{render_history(turn)}\n\nConsulta actual:\n{turn.message}",
+            user=f"{customer}Historial:\n{render_history(turn)}\n\nConsulta actual:\n{turn.message}",
         )
         data = {"route": decision.route}
         if decision.route == "out_of_scope":

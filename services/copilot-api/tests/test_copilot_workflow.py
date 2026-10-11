@@ -69,6 +69,15 @@ async def test_missing_context_asks_for_clarification():
     assert answer.message == decision.clarification_question
 
 
+async def test_router_sees_the_customer_selected_in_the_request():
+    client = FakeChatClient({RouteDecision: route("out_of_scope")})
+    services = make_services(llm=Llm(client, model="gpt-4.1-mini"))
+
+    await run_turn(services, "¿Cuál es la renta mensual de este cliente?", actor="ana", customer_id="C-1007")
+
+    assert "C-1007" in client.prompts[0]
+
+
 def test_missing_context_requires_a_question():
     with pytest.raises(ValidationError):
         route("missing_context")
