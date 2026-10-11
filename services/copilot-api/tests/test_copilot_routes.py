@@ -1,5 +1,5 @@
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import httpx
 import jwt
@@ -240,6 +240,41 @@ async def test_supervisor_cannot_approve_their_own_request(api):
     response = await app.request("POST", "/access-requests/ar-1/decision", "sofia", json={"approved_fields": []})
 
     assert response.status_code == 403
+
+
+async def seed_decided(app, request_id: str, status: str, minutes_ago: int) -> None:
+    decided_at = datetime.now(UTC) - timedelta(minutes=minutes_ago)
+    await app.deps.store.create_access_request(
+        AccessRequest(
+            id=request_id,
+            customer_id="C-1001",
+            fields=["monthly_income", "current_debt"],
+            purpose="Evaluar requisitos del hipotecario",
+            requested_by="ana",
+            status=status,
+            created_at=decided_at - timedelta(minutes=1),
+            decided_by="sofia",
+            decided_at=decided_at,
+            approved_fields=["monthly_income"] if status != "rejected" else [],
+        )
+    )
+
+
+async def test_approved_request_past_the_grant_window_reads_as_expired(api):
+    app = api()
+    await seed_decided(app, "ar-old", "approved", minutes_ago=31)
+    await seed_decided(app, "ar-new", "partially_approved", minutes_ago=29)
+    await seed_decided(app, "ar-no", "rejected", minutes_ago=120)
+
+    async def statuses(**params) -> dict[str, str]:
+        listed = (await app.request("GET", "/access-requests", "sofia", params=params)).json()
+        return {item["id"]: item["status"] for item in listed}
+
+    assert (await app.request("GET", "/access-requests/ar-old", "ana")).json()["status"] == "expired"
+    assert (await app.request("GET", "/access-requests/ar-new", "ana")).json()["status"] == "partially_approved"
+    assert await statuses() == {"ar-old": "expired", "ar-new": "partially_approved", "ar-no": "rejected"}
+    assert await statuses(status="expired") == {"ar-old": "expired"}
+    assert await statuses(status="approved") == {}
 
 
 async def test_listing_without_status_returns_every_request(api):
