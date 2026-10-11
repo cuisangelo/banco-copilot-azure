@@ -19,6 +19,8 @@ from mcp_bank.server import create_server
 APIM = "https://apim.test"
 SUBSCRIPTION_KEY = "test-subscription-key"
 PERSONA_JWT = "Bearer persona.jwt.token"
+MCP_HOST = "mcp-bank.test"
+ACA_HOST = "bcopilot-mcp-bank.internal.env.canadaeast.azurecontainerapps.io"
 
 
 def product(product_id: str, category: str = "credit_card") -> dict:
@@ -58,6 +60,7 @@ def apim():
 def server(monkeypatch):
     monkeypatch.setenv("APIM_BASE_URL", APIM)
     monkeypatch.setenv("APIM_SUBSCRIPTION_KEY", SUBSCRIPTION_KEY)
+    monkeypatch.setenv("MCP_ALLOWED_HOSTS", f"{ACA_HOST},{MCP_HOST}")
     return create_server()
 
 
@@ -68,7 +71,7 @@ async def connect(server, headers: dict[str, str] | None = None):
 
     async with server.session_manager.run():
         async with httpx.AsyncClient(transport=transport, headers=headers) as http_client:
-            async with streamable_http_client("http://mcp-bank.test/mcp", http_client=http_client) as (
+            async with streamable_http_client(f"http://{MCP_HOST}/mcp", http_client=http_client) as (
                 read,
                 write,
                 _,
@@ -257,5 +260,39 @@ async def test_customer_fields_rejects_unknown_field_names(server, apim):
 async def test_missing_apim_base_url_fails_at_startup(monkeypatch):
     monkeypatch.delenv("APIM_BASE_URL", raising=False)
     monkeypatch.setenv("APIM_SUBSCRIPTION_KEY", SUBSCRIPTION_KEY)
+    monkeypatch.setenv("MCP_ALLOWED_HOSTS", ACA_HOST)
     with pytest.raises(RuntimeError, match="APIM_BASE_URL is required"):
         create_server()
+
+
+async def test_missing_allowed_hosts_fails_at_startup(monkeypatch):
+    monkeypatch.setenv("APIM_BASE_URL", APIM)
+    monkeypatch.setenv("APIM_SUBSCRIPTION_KEY", SUBSCRIPTION_KEY)
+    monkeypatch.delenv("MCP_ALLOWED_HOSTS", raising=False)
+    with pytest.raises(RuntimeError, match="MCP_ALLOWED_HOSTS is required"):
+        create_server()
+
+
+async def post_tools_list(server, host: str) -> httpx.Response:
+    """Raw HTTP request with an explicit Host header, the way copilot-api reaches the ACA internal FQDN."""
+    transport = httpx.ASGITransport(app=server.streamable_http_app())
+    async with server.session_manager.run():
+        async with httpx.AsyncClient(transport=transport) as client:
+            return await client.post(
+                f"http://{host}/mcp",
+                json={"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}},
+                headers={"Accept": "application/json, text/event-stream"},
+            )
+
+
+async def test_allowed_host_lists_tools(server):
+    response = await post_tools_list(server, ACA_HOST)
+
+    assert response.status_code == 200
+    assert len(response.json()["result"]["tools"]) == 5
+
+
+async def test_unlisted_host_is_421(server):
+    response = await post_tools_list(server, "attacker.example")
+
+    assert response.status_code == 421

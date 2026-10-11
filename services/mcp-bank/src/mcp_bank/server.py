@@ -3,6 +3,7 @@ from typing import Annotated
 import httpx
 from mcp.server.fastmcp import Context, FastMCP
 from mcp.server.fastmcp.exceptions import ToolError
+from mcp.server.transport_security import TransportSecuritySettings
 from pydantic import Field
 from starlette.applications import Starlette
 
@@ -46,8 +47,17 @@ def _ok(response: httpx.Response) -> httpx.Response:
 def create_server() -> FastMCP:
     apim_base_url = require_env("APIM_BASE_URL").rstrip("/")
     subscription_key = require_env("APIM_SUBSCRIPTION_KEY")
+    allowed_hosts = [host.strip() for host in require_env("MCP_ALLOWED_HOSTS").split(",")]
     # Stateless JSON responses let any replica serve any request; there are no server-initiated messages.
-    server = FastMCP("mcp-bank", host="0.0.0.0", stateless_http=True, json_response=True)
+    server = FastMCP(
+        "mcp-bank",
+        host="0.0.0.0",
+        stateless_http=True,
+        json_response=True,
+        transport_security=TransportSecuritySettings(
+            enable_dns_rebinding_protection=True, allowed_hosts=allowed_hosts
+        ),
+    )
 
     async def apim(method: str, path: str, authorization: str | None = None, **kwargs) -> httpx.Response:
         headers = {"Ocp-Apim-Subscription-Key": subscription_key}
