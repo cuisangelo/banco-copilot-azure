@@ -8,10 +8,13 @@ dependencies = ["bank-contracts"]
 package = false
 
 [tool.uv.workspace]
-members = ["packages/*", "services/*", "functions/*"]
+members = ["packages/*", "services/*", "functions/*", "evals"]
 
 [tool.uv.sources]
 bank-contracts = { workspace = true }
 
 [dependency-groups]
 dev = ["pytest>=8"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
