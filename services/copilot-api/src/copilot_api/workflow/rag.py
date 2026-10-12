@@ -99,6 +99,7 @@ class Rag(Executor):
         started = time.perf_counter()
         retrieval = await self._services.retriever.search(turn.route.search_query, top=TOP_K)
         found = retrieval.chunks
+        turn.searched = found
         floor = max([self._threshold, *(chunk.reranker_score - RELEVANCE_MARGIN for chunk in found)])
         relevant = [chunk for chunk in found if chunk.reranker_score >= floor]
         attacks = (

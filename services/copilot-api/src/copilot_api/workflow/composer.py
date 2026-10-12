@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from copilot_api.prompts import load_prompt
 from copilot_api.workflow.escalation import ESCALATION_EXECUTOR_ID, EscalationCase
 from copilot_api.workflow.products import ProductFindings
+from copilot_api.workflow.rag import Chunk
 from copilot_api.workflow.trace import emit_trace
 from copilot_api.workflow.turn import Services, Turn
 
@@ -81,9 +82,15 @@ def _covered(topic: str, sources: list[set[str]]) -> bool:
     return any(all(any(word.startswith(stem) for word in source) for stem in stems) for source in sources)
 
 
-def uncovered_topics(topics: list[str], citations: list[Citation]) -> list[str]:
-    """Topics no source names: claims citing real text about another product would still verify."""
-    sources = [set(_words(f"{citation.ref} {citation.snippet}")) for citation in citations]
+def uncovered_topics(topics: list[str], citations: list[Citation], searched: list[Chunk]) -> list[str]:
+    """Topics no source names: claims citing real text about another product would still verify.
+
+    Chunks under the relevance floor count too: a product the question only mentions as context (the
+    account a disputed charge hit) is still documented even when its sheet is not what answers.
+    """
+    texts = [f"{citation.ref} {citation.snippet}" for citation in citations]
+    texts += [f"{chunk.doc_id} {chunk.section} {chunk.content}" for chunk in searched]
+    sources = [set(_words(text)) for text in texts]
     return [topic for topic in topics if not _covered(topic, sources)]
 
 
@@ -111,7 +118,7 @@ class Composer(Executor):
             answer = ChatAnswer(status="insufficient", message=NO_SOURCES_MESSAGE)
             await ctx.send_message(EscalationCase(turn, answer, reason="sin fuentes"), target_id=ESCALATION_EXECUTOR_ID)
             return
-        uncovered = uncovered_topics(turn.route.topics, turn.citations)
+        uncovered = uncovered_topics(turn.route.topics, turn.citations, turn.searched)
         if uncovered:
             await emit_trace(ctx, "composer", started, {"citations": len(turn.citations), "uncovered_topics": uncovered})
             topics = " ni ".join(f"«{topic}»" for topic in uncovered)

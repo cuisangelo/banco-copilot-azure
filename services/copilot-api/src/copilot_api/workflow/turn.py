@@ -42,6 +42,8 @@ class Turn:
     history: list[HistoryEntry]
     route: RouteDecision | None = None
     chunks: list[Chunk] = field(default_factory=list)
+    # Everything the search returned, relevant or not: only matched word by word, never shown to the model.
+    searched: list[Chunk] = field(default_factory=list)
     products: list[Product] = field(default_factory=list)
     customer_plan: CustomerPlan | None = None
     profile: CustomerProfile | None = None

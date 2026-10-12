@@ -401,6 +401,24 @@ async def test_every_word_of_a_topic_must_appear_in_one_source():
     assert answer.status == "insufficient"
 
 
+async def test_a_topic_named_only_below_the_relevance_floor_still_counts_as_covered():
+    # "cuenta corriente" is context of a claims question; its sheet scores under the best chunk's margin.
+    claims = chunk("procedimiento-reclamos-1", "Registrar el reclamo el mismo día; respuesta en 10 días hábiles.", score=2.8)
+    account = chunk("ficha-cuenta-corriente-5", "La cuenta corriente se cierra en sucursal.", score=1.9)
+    services = make_services(
+        llm=scripted(
+            route("procedure", topics=["reclamo", "cuenta corriente"]),
+            composed(DraftClaim(text="Registrar el reclamo el mismo día", citation_ids=["S1"])),
+        ),
+        retriever=FakeRetriever([claims, account]),
+    )
+
+    answer = answer_of(await run_turn(services, "¿Cómo registro un reclamo por un cobro en la cuenta corriente?"))
+
+    assert answer.status == "ok"
+    assert [citation.ref for citation in answer.citations] == ["procedimiento-reclamos §Requisitos"]
+
+
 async def test_topics_named_in_the_sources_answer_despite_plural_and_accents():
     output = ComposerOutput(message="Esto es lo que encontré.", requirements=COMPARISON[:4], steps=[])
     services = make_services(
