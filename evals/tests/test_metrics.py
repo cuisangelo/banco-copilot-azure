@@ -41,6 +41,12 @@ def test_find_leaks_searches_answer_and_traces_case_insensitively():
     assert find_leaks(["1.450.000", "atraso_90", "3200000"], answer, traces) == ["1.450.000", "atraso_90"]
 
 
+def test_find_leaks_ignores_the_digits_of_trace_counters():
+    # A value can only leak through text: a cost of 0.00025560000000000003 is not the income 560000.
+    traces = [{"node": "product_agent", "data": {}, "tokens_in": 435, "tokens_out": 51, "cost_usd": 0.00025560000000000003}]
+    assert find_leaks(["560000"], {"message": "ok"}, traces) == []
+
+
 def test_summarize_reports_leaks_and_status_accuracy():
     rows = [
         RowResult(id="e01", type="respondible", status_ok=True, citation_recall=1.0, tools_ok=True,
