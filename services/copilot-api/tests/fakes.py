@@ -9,6 +9,7 @@ from bank_contracts.models import AccessRequest, CustomerFields, CustomerProfile
 from pydantic import BaseModel
 
 from copilot_api.grants import GrantConflict
+from copilot_api.guards.content_safety import Groundedness
 from copilot_api.mcp_bank import ToolFailed
 from copilot_api.workflow.llm import Usage
 from copilot_api.workflow.rag import Retrieval, RetrievalMode
@@ -37,6 +38,17 @@ class FakeChatClient:
         )
 
 
+def ungrounded_detail(text: str, segment: str) -> dict:
+    """The `ungroundedDetails` entry detectGroundedness returns for `segment` within `text`."""
+    offset = text.index(segment)
+    return {
+        "text": segment,
+        "offset": {"utf8": len(text[:offset].encode()), "utf16": offset, "codePoint": offset},
+        "length": {"utf8": len(segment.encode()), "utf16": len(segment), "codePoint": len(segment)},
+        "reason": None,
+    }
+
+
 class FakeSafety:
     def __init__(self, *, user_attack: bool = False, attacked_snippets: tuple[str, ...] = (), ungrounded: bool = False):
         self._user_attack = user_attack
@@ -49,8 +61,8 @@ class FakeSafety:
     async def document_attacks(self, user_text: str, documents: list[str]) -> list[bool]:
         return [any(snippet in document for snippet in self._attacked) for document in documents]
 
-    async def ungrounded_percentage(self, text: str, sources: list[str], *, query: str) -> float:
-        return 1.0 if self._ungrounded else 0.0
+    async def groundedness(self, text: str, sources: list[str], *, query: str) -> Groundedness:
+        return Groundedness(1.0, [text]) if self._ungrounded else Groundedness(0.0, [])
 
 
 PROFILES = {

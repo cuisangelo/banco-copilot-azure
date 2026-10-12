@@ -1,11 +1,13 @@
 import asyncio
 import json
 
+import httpx
 import pytest
 from agent_framework import InMemoryCheckpointStorage
 from bank_contracts.models import EscalationDecision
 from pydantic import ValidationError
 
+from copilot_api.guards.content_safety import ContentSafety
 from copilot_api.store import InMemoryStore
 from copilot_api.workflow.composer import ComposerOutput, DraftClaim
 from copilot_api.workflow.customer import CustomerPlan
@@ -16,7 +18,7 @@ from copilot_api.workflow.rag import Chunk
 from copilot_api.workflow.router import RouteDecision
 from copilot_api.workflow.trace import TRACE_EVENT_TYPE
 from copilot_api.workflow.turn import Turn, TurnResult
-from fakes import FakeBank, FakeChatClient, FakeRetriever, FakeSafety
+from fakes import FakeBank, FakeChatClient, FakeRetriever, FakeSafety, ungrounded_detail
 from wiring import make_services
 
 
@@ -279,6 +281,116 @@ async def test_ungrounded_answer_is_insufficient():
     )
 
     assert answer_of(await run_turn(services, "¿antigüedad laboral?")).status == "insufficient"
+
+
+ORO = chunk("ficha-tc-oro-0", "Tarjeta Oro: renta mínima $800.000, mantención $4.500 mensual, seguro de viaje nacional.")
+PLATINUM = chunk(
+    "ficha-tc-platinum-0", "Tarjeta Platinum: renta mínima $1.500.000, mantención $7.900 mensual, seguro de viaje internacional."
+)
+COMPARISON = [
+    DraftClaim(text="Oro exige renta mínima de $800.000", citation_ids=["S1"]),
+    DraftClaim(text="Platinum exige renta mínima de $1.500.000", citation_ids=["S2"]),
+    DraftClaim(text="Oro cobra $4.500 de mantención mensual", citation_ids=["S1"]),
+    DraftClaim(text="Platinum cobra $7.900 de mantención mensual", citation_ids=["S2"]),
+    DraftClaim(text="Oro incluye seguro de viaje nacional", citation_ids=["S1"]),
+    DraftClaim(text="La reposición de una tarjeta bloqueada demora 5 días hábiles", citation_ids=["S2"]),
+]
+
+
+def groundedness_endpoint(*ungrounded: str) -> ContentSafety:
+    """Content Safety over a fake HTTP endpoint that flags `ungrounded` wherever it appears and sees no attacks."""
+
+    def responder(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        if request.url.path.endswith(":shieldPrompt"):
+            analyses = [{"attackDetected": False} for _ in body["documents"]]
+            return httpx.Response(200, json={"userPromptAnalysis": {"attackDetected": False}, "documentsAnalysis": analyses})
+        details = [ungrounded_detail(body["text"], segment) for segment in ungrounded]
+        share = sum(len(segment) for segment in ungrounded) / len(body["text"])
+        return httpx.Response(
+            200, json={"ungroundedDetected": bool(details), "ungroundedPercentage": share, "ungroundedDetails": details}
+        )
+
+    http = httpx.AsyncClient(transport=httpx.MockTransport(responder))
+    return ContentSafety(endpoint="https://cs.example", http=http, token_provider=_static_token)
+
+
+async def _static_token() -> str:
+    return "aad-token"
+
+
+async def compare(*ungrounded: str, message: str = "Esto es lo que encontré."):
+    output = ComposerOutput(message=message, requirements=COMPARISON[:4], steps=COMPARISON[4:])
+    services = make_services(
+        llm=scripted(route("procedure"), output),
+        retriever=FakeRetriever([ORO, PLATINUM]),
+        safety=groundedness_endpoint(*ungrounded),
+    )
+    events = await run_turn(services, "¿Diferencia entre Oro y Platinum?")
+    (verifier,) = [event.data for event in events if event.type == TRACE_EVENT_TYPE and event.data.node == "verifier"]
+    return answer_of(events), verifier, events
+
+
+def claim_texts(answer) -> list[str]:
+    return [claim.text for claim in answer.requirements + answer.steps]
+
+
+async def test_fully_grounded_answer_keeps_every_claim_and_its_message():
+    answer, verifier, _ = await compare()
+
+    assert answer.status == "ok"
+    assert claim_texts(answer) == [claim.text for claim in COMPARISON]
+    assert answer.message == "Esto es lo que encontré."
+    assert verifier.data["dropped_claims"] == 0
+
+
+async def test_one_ungrounded_claim_is_dropped_and_the_rest_answer_ok():
+    # The service flags a passage inside the claim, with its own casing and spacing.
+    answer, verifier, events = await compare("reposición de una tarjeta  bloqueada".replace("  ", " "))
+
+    assert answer.status == "ok"
+    assert claim_texts(answer) == [claim.text for claim in COMPARISON[:5]]
+    assert answer.message == "Esto es lo que encontré.\nOmití 1 afirmación que las fuentes no respaldan."
+    assert answer.escalation is None
+    assert verifier.data["dropped_claims"] == 1
+    assert verifier.data["guardrail"] == "groundedness"
+    assert verifier.data["ungrounded_percentage"] > 0
+    traces = json.dumps([event.data.data for event in events if event.type == TRACE_EVENT_TYPE], ensure_ascii=False)
+    assert "reposición" not in traces.casefold()
+
+
+async def test_half_of_the_claims_ungrounded_still_answers_with_the_other_half():
+    answer, verifier, _ = await compare(*(claim.text for claim in COMPARISON[3:]))
+
+    assert answer.status == "ok"
+    assert claim_texts(answer) == [claim.text for claim in COMPARISON[:3]]
+    assert answer.message.endswith("Omití 3 afirmaciones que las fuentes no respaldan.")
+
+
+async def test_more_than_half_ungrounded_is_insufficient_and_escalates():
+    answer, verifier, _ = await compare(*(claim.text for claim in COMPARISON[2:]))
+
+    assert answer.status == "insufficient"
+    assert answer.requirements == [] and answer.steps == []
+    assert answer.escalation is not None
+    assert verifier.data["dropped_claims"] == 4
+
+
+async def test_ungrounded_message_is_replaced_by_the_sources_lead_in():
+    answer, verifier, _ = await compare("Platinum incluye acceso a salas VIP.", message="Platinum incluye acceso a salas VIP.")
+
+    assert answer.status == "ok"
+    assert answer.message == "Esto es lo que respaldan las fuentes:"
+    assert claim_texts(answer) == [claim.text for claim in COMPARISON]
+    assert verifier.data["dropped_claims"] == 0
+
+
+async def test_ungrounded_passage_no_claim_contains_is_insufficient():
+    # Straddles two claims without containing either: it cannot be dropped claim by claim.
+    answer, _, _ = await compare("$800.000\nPlatinum exige")
+
+    assert answer.status == "insufficient"
+    assert answer.escalation is not None
 
 
 async def test_circular_and_mortgage_sheet_disagreeing_is_a_contradiction():

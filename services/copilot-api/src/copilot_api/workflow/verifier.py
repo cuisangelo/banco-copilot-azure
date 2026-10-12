@@ -15,6 +15,7 @@ UNSUPPORTED_MESSAGE = (
 CONTRADICTION_MESSAGE = (
     "Las fuentes se contradicen sobre «{attribute}». Te muestro ambas y te propongo escalar para confirmar cuál rige."
 )
+GROUNDED_LEAD_IN = "Esto es lo que respaldan las fuentes:"
 FIELD_LABELS = {
     "monthly_income": "renta mensual",
     "current_debt": "deuda vigente",
@@ -26,6 +27,15 @@ assert FIELD_LABELS.keys() == set(LEVEL2_FIELDS)
 
 def _normalize(text: str) -> str:
     return " ".join(text.casefold().split())
+
+
+def _overlaps(text: str, segments: list[str]) -> bool:
+    normalized = _normalize(text)
+    return any(segment in normalized or normalized in segment for segment in segments)
+
+
+def _dropped_note(count: int) -> str:
+    return f"\nOmití {count} {'afirmación' if count == 1 else 'afirmaciones'} que las fuentes no respaldan."
 
 
 def find_contradiction(claims: list[DraftClaim], customer_citation_ids: set[str]) -> str | None:
@@ -83,32 +93,47 @@ class Verifier(Executor):
             )
             return
         known = {citation.id for citation in turn.citations}
-        text = "\n".join([composed.message, *(claim.text for claim in claims)])
-        ungrounded_share = await self._services.safety.ungrounded_percentage(
-            text, [citation.snippet for citation in turn.citations], query=turn.message
+        parts = [composed.message, *(claim.text for claim in claims)]
+        groundedness = await self._services.safety.groundedness(
+            "\n".join(parts), [citation.snippet for citation in turn.citations], query=turn.message
         )
-        ungrounded = ungrounded_share > 0
+        segments = [segment for segment in map(_normalize, groundedness.segments) if segment]
+        dropped = [claim for claim in claims if _overlaps(claim.text, segments)]
+        # A flagged passage that is neither the message nor inside a claim cannot be removed claim by claim.
+        unattributed = any(not any(_overlaps(part, [segment]) for part in parts) for segment in segments)
+        kept_requirements = [claim for claim in composed.requirements if claim not in dropped]
+        kept_steps = [claim for claim in composed.steps if claim not in dropped]
+        kept = kept_requirements + kept_steps
+        ungrounded = unattributed or not kept or len(dropped) * 2 > len(claims)
         uncited = [claim.text for claim in claims if not claim.citation_ids or not set(claim.citation_ids) <= known]
         customer_ids = {citation.id for citation in turn.citations if citation.kind == "customer"}
-        conflict = None if ungrounded or uncited else find_contradiction(claims, customer_ids)
+        conflict = None if ungrounded or uncited else find_contradiction(kept, customer_ids)
         await emit_trace(
             ctx,
             "verifier",
             started,
-            {"uncited_claims": len(uncited), "contradiction": conflict, "ungrounded_percentage": round(ungrounded_share, 2)}
-            | ({"guardrail": "groundedness"} if ungrounded else {}),
+            {
+                "uncited_claims": len(uncited),
+                "dropped_claims": len(dropped),
+                "contradiction": conflict,
+                "ungrounded_percentage": round(groundedness.percentage, 2),
+            }
+            | ({"guardrail": "groundedness"} if groundedness.percentage > 0 else {}),
         )
         if ungrounded or uncited:
             answer = ChatAnswer(status="insufficient", message=UNSUPPORTED_MESSAGE + _caveats(turn))
             reason = "respuesta sin sustento en las fuentes" if ungrounded else "afirmaciones sin cita"
             await ctx.send_message(EscalationCase(turn, answer, reason=reason), target_id=ESCALATION_EXECUTOR_ID)
             return
+        message = (GROUNDED_LEAD_IN if _overlaps(composed.message, segments) else composed.message) + (
+            _dropped_note(len(dropped)) if dropped else ""
+        )
         if conflict:
             answer = ChatAnswer(
                 status="contradiction",
                 message=CONTRADICTION_MESSAGE.format(attribute=conflict) + _caveats(turn),
-                requirements=_claims(composed.requirements),
-                steps=_claims(composed.steps),
+                requirements=_claims(kept_requirements),
+                steps=_claims(kept_steps),
                 citations=turn.citations,
             )
             await ctx.send_message(
@@ -117,9 +142,9 @@ class Verifier(Executor):
             return
         answer = ChatAnswer(
             status="ok",
-            message=composed.message + _caveats(turn),
-            requirements=_claims(composed.requirements),
-            steps=_claims(composed.steps),
+            message=message + _caveats(turn),
+            requirements=_claims(kept_requirements),
+            steps=_claims(kept_steps),
             citations=turn.citations,
         )
         await ctx.yield_output(TurnResult(answer, level2_values(turn)))

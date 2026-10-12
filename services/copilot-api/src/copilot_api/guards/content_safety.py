@@ -1,4 +1,5 @@
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 
 import httpx
 
@@ -19,6 +20,17 @@ def _shield_batches(documents: list[str]) -> list[list[str]]:
             batches.append(batch := [])
         batch.append(document)
     return [batch for batch in batches if batch]
+
+
+@dataclass(frozen=True)
+class Groundedness:
+    """Share of the text (0–1) the sources do not support, and the passages that carry it.
+
+    Segments are answer text and may quote level-2 values: they must never reach a trace or a log.
+    """
+
+    percentage: float
+    segments: list[str]
 
 
 class ContentSafety:
@@ -61,8 +73,7 @@ class ContentSafety:
             attacks += [analysis["attackDetected"] for analysis in result["documentsAnalysis"]]
         return attacks
 
-    async def ungrounded_percentage(self, text: str, sources: list[str], *, query: str) -> float:
-        """Share of the text (0–1) that the sources do not support; 0 when it is fully grounded."""
+    async def groundedness(self, text: str, sources: list[str], *, query: str) -> Groundedness:
         # QnA, not Summarization: an answer draws conclusions ("cumple según la ficha") that
         # Summarization flags as ungrounded even when every premise is in the sources.
         result = await self._post(
@@ -70,4 +81,6 @@ class ContentSafety:
             GROUNDEDNESS_API_VERSION,
             {"domain": "Generic", "task": "QnA", "qna": {"query": query}, "text": text, "groundingSources": sources},
         )
-        return float(result["ungroundedPercentage"]) if result["ungroundedDetected"] else 0.0
+        if not result["ungroundedDetected"]:
+            return Groundedness(0.0, [])
+        return Groundedness(float(result["ungroundedPercentage"]), [detail["text"] for detail in result["ungroundedDetails"]])

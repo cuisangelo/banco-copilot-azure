@@ -3,11 +3,12 @@ import json
 import httpx
 import pytest
 
-from copilot_api.guards.content_safety import ContentSafety
+from copilot_api.guards.content_safety import ContentSafety, Groundedness
 from copilot_api.guards.pii_mask import mask_pii
 from copilot_api.guards.rate_limit import RateLimiter
 from copilot_api.guards.token_cap import TokenCap, TokenCapExceeded
 from copilot_api.store import InMemoryStore
+from fakes import ungrounded_detail
 
 
 async def test_token_cap_allows_until_the_exact_threshold():
@@ -118,12 +119,22 @@ async def test_document_shield_batches_within_the_service_limits():
     assert sum(batches) == 8
 
 
-async def test_groundedness_reports_ungrounded_text():
+async def test_groundedness_reports_the_ungrounded_share_and_segments():
     def responder(request: httpx.Request) -> httpx.Response:
         assert request.url.path == "/contentsafety/text:detectGroundedness"
-        return httpx.Response(200, json={"ungroundedDetected": True, "ungroundedPercentage": 0.4})
+        details = [ungrounded_detail("Bloqueo inmediato. Reposición en 5 días.", "Reposición en 5 días.")]
+        return httpx.Response(200, json={"ungroundedDetected": True, "ungroundedPercentage": 0.4, "ungroundedDetails": details})
 
-    assert await _safety(responder).ungrounded_percentage("respuesta", ["fuente"], query="pregunta") == 0.4
+    result = await _safety(responder).groundedness("respuesta", ["fuente"], query="pregunta")
+
+    assert result == Groundedness(percentage=0.4, segments=["Reposición en 5 días."])
+
+
+async def test_grounded_text_has_no_segments():
+    def responder(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"ungroundedDetected": False, "ungroundedPercentage": 0, "ungroundedDetails": []})
+
+    assert await _safety(responder).groundedness("respuesta", ["fuente"], query="pregunta") == Groundedness(0.0, [])
 
 
 async def test_groundedness_judges_the_answer_against_the_advisor_question():
@@ -131,9 +142,9 @@ async def test_groundedness_judges_the_answer_against_the_advisor_question():
 
     def responder(request: httpx.Request) -> httpx.Response:
         seen.update(json.loads(request.content))
-        return httpx.Response(200, json={"ungroundedDetected": False, "ungroundedPercentage": 0})
+        return httpx.Response(200, json={"ungroundedDetected": False, "ungroundedPercentage": 0, "ungroundedDetails": []})
 
-    await _safety(responder).ungrounded_percentage("Cumple según la ficha.", ["mínimo 12 meses"], query="¿Cumple la antigüedad?")
+    await _safety(responder).groundedness("Cumple según la ficha.", ["mínimo 12 meses"], query="¿Cumple la antigüedad?")
 
     assert seen["task"] == "QnA"
     assert seen["qna"] == {"query": "¿Cumple la antigüedad?"}
