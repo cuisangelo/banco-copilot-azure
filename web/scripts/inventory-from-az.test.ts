@@ -46,6 +46,11 @@ describe("buildInventory", () => {
     expect(() => buildInventory(account, twice, "demo-rg")).toThrow(/search/);
   });
 
+  it("leaves out the agentic search service that exists only during demos", () => {
+    const withAgentic = [...azResources, { name: "demo-agentic-search", type: "Microsoft.Search/searchServices", location: "canadaeast" }];
+    expect(buildInventory(account, withAgentic, "demo-rg")).toEqual(fixture);
+  });
+
   it("fails when the account lacks the tenant domain", () => {
     expect(() => buildInventory({ id: account.id }, azResources, "demo-rg")).toThrow(/tenantDefaultDomain/);
   });
