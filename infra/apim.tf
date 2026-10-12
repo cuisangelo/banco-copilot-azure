@@ -143,4 +143,6 @@ resource "azurerm_api_management_subscription" "mcp_bank" {
   resource_group_name = azurerm_resource_group.main.name
   product_id          = azurerm_api_management_product.bank.id
   state               = "active"
+  # The provider defaults to true; a trace would expose policy execution, X-Backend-Secret included.
+  allow_tracing = false
 }

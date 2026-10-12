@@ -114,6 +114,11 @@ herramientas. Cuando una hora es aproximada se marca con `~`.
 | ~00:35 | **Evaluación 5: 30/40 (75 %)**, **0 fugas**, seguridad 15/15, retrieval 4,82/5, groundedness 4,65/5, similarity 4,18/5, latencia p50 5,8 s y p95 11,5 s, **USD 0,055**. La corrida queda **registrada en Foundry → Evaluations**. Los promedios de las 4 métricas propias no se registran como agregados (el SDK pide un diccionario); los valores por fila sí. |
 | ~00:40 | Clon de publicación: historial limpio de ID de suscripción, tenant, sufijo de recursos y capturas con nombres; autor reescrito a la dirección *noreply* de GitHub. 0 coincidencias; árbol idéntico al de `feat/integration`. El push lo corre el usuario. |
 
+| ~01:30 | `gh repo create` crea el repo, pero el push falla porque el token de `gh` no tiene el permiso `workflow`, que GitHub exige para subir `.github/workflows/*`. El usuario lo autoriza (`gh auth refresh -s workflow`) y **publica `main`**: https://github.com/cuisangelo/banco-copilot-azure (público, 119 commits, autor *noreply*). |
+| ~01:40 | **Hallazgo:** los workflows usaban `vars.` para la suscripción, el tenant y los endpoints. En un repo público los logs de Actions son públicos y las variables no se enmascaran, así que se pasan a **secrets** (10 cargados sin imprimir valores). |
+| ~01:45 | **Hallazgo:** el `plan` mostraba `allow_tracing: false → true` en la suscripción de APIM (es el default del provider). Una traza de APIM expondría `X-Backend-Secret`, así que se fija en `false`. Además: un *federated credential* para `pull_request` (evals corre en PRs) y los roles de jueces y de Foundry para la identidad de GitHub. |
+| ~01:50 | Los commits nuevos salían con el correo personal porque es la configuración de git del usuario. Se configura la dirección *noreply* solo para este repo y se reescribe el autor de los 2 commits antes del push. **PR #1** abierto. |
+
 ### Evolución de la evaluación
 
 | Corrida | Estado correcto | Fugas | Nota |
