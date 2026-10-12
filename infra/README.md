@@ -58,7 +58,7 @@ Website Contributor sobre la Function. La credencial federada se crea cuando exi
 
 ```sh
 terraform -chdir=infra apply -var github_repository=<owner>/<repo>
-terraform -chdir=infra output github_deploy   # copiar cada clave como variable del repo en GitHub
+terraform -chdir=infra output github_deploy   # copiar cada clave como *secret* del repo en GitHub (los logs son públicos)
 ```
 
 Las imágenes arrancan con `mcr.microsoft.com/k8se/quickstart` como placeholder. Terraform ignora los
