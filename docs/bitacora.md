@@ -4,6 +4,11 @@ Registro de lo avanzado, iterado y fallado al construir y desplegar el copiloto.
 del 2026-10-11** y salen de los commits (`git log`), de los logs de Azure o de las salidas de las
 herramientas. Cuando una hora es aproximada se marca con `~`.
 
+> **Sobre los hashes:** el repo público se publicó con el historial limpio de identificadores del
+> despliegue (ID de suscripción, tenant, sufijo de recursos y capturas que los mostraban). Por eso los
+> commits a partir de `800bed5` tienen en GitHub hashes distintos de los citados acá. El mensaje y la
+> hora de cada commit se conservan, así que se encuentran por su descripción.
+
 **Estado al cierre de esta entrada:**
 
 - En vivo en https://azure.cuisangelo.com.
