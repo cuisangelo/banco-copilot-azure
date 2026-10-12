@@ -40,5 +40,5 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# deployed inventory for /documentacion (scripts/web_inventory.sh); never committed
-/app/documentacion/inventory.generated.json
+# deployed inventory (scripts/web_inventory.sh), served to the owner only; never committed
+/public/privado/

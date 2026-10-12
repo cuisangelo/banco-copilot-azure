@@ -1,22 +1,18 @@
-// Server component on purpose: its content ships only in documentacion.html/.txt, which Static Web Apps
-// serves behind built-in auth. Client components imported here end up in public chunks.
+// Public page. Only the layout (services, types, regions) is rendered into it; resource names, the
+// subscription and portal links reach the browser from /privado/inventario.json, served to the owner only.
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ApiStatus } from "@/components/ApiStatus";
-import { LockIcon } from "@/components/icons";
 import { FIELD_LABEL, NODE_LABEL } from "@/lib/labels";
 import { GRANT_MINUTES, LEVEL2_FIELDS } from "@/lib/types";
 import { ArchitectureDiagram } from "./ArchitectureDiagram";
-import { portalUrl } from "./azure";
-import { loadDeployment } from "./inventory";
+import { loadLayout } from "./inventory";
+import { AccountLink, PortalProvider } from "./portal";
+import { ResourceList } from "./ResourceList";
 
 export const metadata: Metadata = {
   title: "Documentación · Banco Austral",
   description: "Arquitectura, workflow y recursos desplegados del copiloto de atención.",
 };
-
-// Guaranteed at build time by next.config.ts.
-const JWKS_URL = `${process.env.NEXT_PUBLIC_API_BASE_URL}/.well-known/jwks.json`;
 
 const SECTIONS = [
   { id: "arquitectura", label: "Arquitectura" },
@@ -24,7 +20,6 @@ const SECTIONS = [
   { id: "busqueda", label: "Búsqueda" },
   { id: "niveles", label: "Niveles de acceso" },
   { id: "recursos", label: "Recursos en Azure" },
-  { id: "evidencia", label: "Evidencia pública" },
   { id: "decisiones", label: "Decisiones" },
   { id: "produccion", label: "Producción objetivo" },
 ];
@@ -192,8 +187,9 @@ const Code = ({ children }: { children: React.ReactNode }) => (
 );
 
 export default function DocumentationPage() {
-  const deployment = loadDeployment();
+  const layout = loadLayout();
   return (
+    <PortalProvider>
     <main className="relative min-h-0 flex-1 overflow-y-auto">
       <div className="mx-auto max-w-[1200px] px-4 pb-20 sm:px-6">
         <header className="pt-10 sm:pt-14">
@@ -211,12 +207,7 @@ export default function DocumentationPage() {
             >
               Probar el copiloto
             </Link>
-            <a
-              href="/.auth/logout?post_logout_redirect_uri=/"
-              className="rounded-full px-5 py-2.5 font-semibold text-brand ring-1 ring-line transition-colors hover:bg-sky"
-            >
-              Cerrar sesión
-            </a>
+            <AccountLink className="rounded-full px-5 py-2.5 font-semibold text-brand ring-1 ring-line transition-colors hover:bg-sky" />
           </div>
           <p className="mt-3 text-sm text-muted">Datos sintéticos; ninguna operación bancaria es real.</p>
           <nav aria-label="En esta página" className="mt-8 border-t border-line pt-4">
@@ -238,14 +229,14 @@ export default function DocumentationPage() {
         <Section
           id="arquitectura"
           title="Arquitectura"
-          lead="Cada ícono es un recurso desplegado: ábrelo para verlo en el portal de Azure. copilot-api es la única frontera pública; los datos de clientes solo llegan por mcp-bank y API Management, con la identidad de la persona en el JWT."
+          lead="Cada ícono es un recurso desplegado; con la sesión del autor, se abre en el portal de Azure. copilot-api es la única frontera pública; los datos de clientes solo llegan por mcp-bank y API Management, con la identidad de la persona en el JWT."
         >
           <figure className="overflow-hidden rounded-3xl bg-white shadow-soft ring-1 ring-line">
             <p className="border-b border-line px-5 py-2.5 text-sm text-muted xl:hidden">
               Desliza para ver el diagrama completo.
             </p>
             <div className="overflow-x-auto p-3 sm:p-4" tabIndex={0} aria-label="Diagrama de arquitectura, desplazable">
-              <ArchitectureDiagram deployment={deployment} />
+              <ArchitectureDiagram layout={layout} />
             </div>
             <figcaption className="grid gap-6 border-t border-line px-5 py-5 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
               <Legend label="Flujo principal" steps={FLOW} />
@@ -396,83 +387,9 @@ export default function DocumentationPage() {
         <Section
           id="recursos"
           title="Recursos desplegados"
-          lead={`Todo vive en el grupo de recursos ${deployment.resourceGroup} y se crea con Terraform.`}
+          lead="Todo vive en un grupo de recursos y se crea con Terraform."
         >
-          <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-2">
-            <a
-              href={`${deployment.resourceGroupUrl}/overview`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="rounded-full bg-navy px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand"
-            >
-              Grupo de recursos {deployment.resourceGroup}
-            </a>
-            <p className="flex items-center gap-1.5 text-sm text-muted">
-              <LockIcon className="size-4 shrink-0" />
-              Los enlaces al portal requieren acceso a la suscripción del autor.
-            </p>
-          </div>
-          <ul
-            aria-label="Recursos desplegados"
-            className="divide-y divide-line overflow-hidden rounded-2xl bg-white shadow-soft ring-1 ring-line"
-          >
-            {deployment.resources.map((r) => (
-              <li
-                key={r.name}
-                className="grid gap-x-6 gap-y-2 px-5 py-4 lg:grid-cols-[minmax(0,17rem)_minmax(0,1fr)_auto] lg:items-center"
-              >
-                <div className="min-w-0">
-                  <h3 className="font-mono text-[0.95rem] font-semibold break-all text-navy">{r.name}</h3>
-                  <p className="mt-0.5 text-sm text-muted">
-                    {r.service}, {r.regionLabel}
-                  </p>
-                </div>
-                <p className="text-[0.95rem] leading-relaxed text-ink">{r.role}</p>
-                <a
-                  href={portalUrl(deployment, r)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="justify-self-start rounded-full px-4 py-2 text-sm font-semibold whitespace-nowrap text-brand ring-1 ring-brand/30 transition-colors hover:bg-sky"
-                >
-                  Ver en Azure<span className="sr-only">: {r.name}</span>
-                </a>
-              </li>
-            ))}
-          </ul>
-        </Section>
-
-        <Section
-          id="evidencia"
-          title="Evidencia pública"
-          lead="Esto lo puede comprobar cualquiera, sin acceso a la suscripción."
-        >
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="rounded-2xl bg-white p-5 shadow-soft ring-1 ring-line">
-              <h3 className="text-sm font-semibold text-muted">Estado en vivo de copilot-api</h3>
-              <div className="mt-2">
-                <ApiStatus />
-              </div>
-              <p className="mt-2 text-sm leading-relaxed text-muted">
-                Medido desde tu navegador al abrir esta página. Sin tráfico, Container Apps escala a cero y el primer
-                pedido tarda más.
-              </p>
-            </div>
-            <div className="rounded-2xl bg-white p-5 shadow-soft ring-1 ring-line">
-              <h3 className="text-sm font-semibold text-muted">Firma de los tokens</h3>
-              <p className="mt-2 leading-relaxed text-ink">
-                copilot-api publica la{" "}
-                <a
-                  href={JWKS_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="font-semibold text-brand underline underline-offset-2 hover:text-brand-hover"
-                >
-                  llave pública de las personas demo
-                </a>
-                . customers-api verifica con ella cada JWT; solo copilot-api firma, con la llave privada en Key Vault.
-              </p>
-            </div>
-          </div>
+          <ResourceList layout={layout} />
         </Section>
 
         <Section id="decisiones" title="Decisiones y tradeoffs">
@@ -501,5 +418,6 @@ export default function DocumentationPage() {
         </Section>
       </div>
     </main>
+    </PortalProvider>
   );
 }

@@ -1,6 +1,6 @@
 // Two leaks this build must not ship, both checked against the real inventory so the check itself never
 // contains what it looks for:
-// 1. Static Web Apps only guards /documentacion*; every other file in out/ is public.
+// 1. Static Web Apps only guards /privado/*; every other file in out/ is public, /documentacion included.
 // 2. The repo is public; no tracked file may identify the deployment.
 import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
@@ -8,9 +8,9 @@ import { join, relative } from "node:path";
 
 const WEB = new URL("..", import.meta.url).pathname;
 const OUT = join(WEB, "out");
-const INVENTORY = join(WEB, "app/documentacion/inventory.generated.json");
+const INVENTORY = join(WEB, "public/privado/inventario.json");
 
-if (!existsSync(INVENTORY)) throw new Error("falta inventory.generated.json: correr scripts/web_inventory.sh <grupo-de-recursos>");
+if (!existsSync(INVENTORY)) throw new Error("falta public/privado/inventario.json: correr scripts/web_inventory.sh <grupo-de-recursos>");
 const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL;
 if (!apiBase) throw new Error("NEXT_PUBLIC_API_BASE_URL is required");
 
@@ -24,7 +24,7 @@ const leaks = [];
 for (const entry of readdirSync(OUT, { recursive: true, withFileTypes: true })) {
   if (!entry.isFile()) continue;
   const path = relative(OUT, join(entry.parentPath, entry.name));
-  if (path.startsWith("documentacion")) continue;
+  if (path.startsWith("privado/")) continue;
   const content = readFileSync(join(OUT, path), "latin1");
   for (const value of publicLeaks) if (content.includes(value)) leaks.push(`out/${path}`);
 }
