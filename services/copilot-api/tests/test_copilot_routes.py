@@ -148,7 +148,7 @@ async def test_trace_events_carry_cost_chunks_and_guardrails(api):
     nodes = traces(await app.chat("¿antigüedad laboral para el hipotecario?"))
 
     assert nodes["router"]["cost_usd"] == pytest.approx(1000 * 0.40 / 1e6 + 200 * 1.60 / 1e6)
-    assert nodes["router"]["data"] == {"route": "procedure", "topics": []}
+    assert nodes["router"]["data"] == {"route": "procedure", "understood_as": "antigüedad hipotecario", "topics": []}
     assert nodes["rag_agent"]["data"]["chunks"] == [
         {"id": FICHA.id, "doc_id": FICHA.doc_id, "section": FICHA.section, "score": FICHA.reranker_score, "content": FICHA.content}
     ]

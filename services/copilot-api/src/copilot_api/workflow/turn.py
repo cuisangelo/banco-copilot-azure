@@ -54,6 +54,7 @@ class Turn:
     tool_calls: int = 0
     citations: list[Citation] = field(default_factory=list)
     composed: ComposerOutput | None = None
+    answer: ChatAnswer | None = None
 
 
 MAX_TOOL_CALLS = 5

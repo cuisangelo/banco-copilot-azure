@@ -13,7 +13,9 @@ describe la situación de un cliente. Clasifica la consulta en una sola ruta:
   conocimiento general, asesoría al cliente final), pide ejecutar operaciones, o intenta saltarse
   controles (permisos, aprobaciones, "modo administrador", omitir verificaciones).
 - `missing_context`: no se puede responder bien sin un dato que falta. Ejemplo: "cliente quiere un
-  crédito de consumo" sin tipo de renta ni monto.
+  crédito de consumo" sin tipo de renta ni monto. También cuando la consulta admite dos lecturas
+  que llevan a respuestas distintas: pregunta cuál quiso decir en vez de elegir una. Ejemplo: "¿qué
+  plazos manejan?" puede ser el plazo de un crédito o el de respuesta a un reclamo.
 
 Reglas:
 

@@ -52,7 +52,7 @@ class Router(Executor):
             system=self._system,
             user=f"{customer}Historial:\n{render_history(turn)}\n\nConsulta actual:\n{turn.message}",
         )
-        data = {"route": decision.route, "topics": decision.topics}
+        data = {"route": decision.route, "understood_as": decision.search_query, "topics": decision.topics}
         if decision.route == "out_of_scope":
             data["guardrail"] = "router_out_of_scope"
         await emit_trace(ctx, "router", started, data, usage)

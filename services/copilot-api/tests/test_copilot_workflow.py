@@ -17,6 +17,7 @@ from copilot_api.workflow.graph import build_workflow
 from copilot_api.workflow.llm import Llm, Usage
 from copilot_api.workflow.products import ProductCall, ProductPlan
 from copilot_api.workflow.rag import UNCHECKED_CONTENT, Chunk
+from copilot_api.workflow.relevance import CANNOT_ANSWER_MESSAGE, RelevanceVerdict
 from copilot_api.workflow.router import RouteDecision
 from copilot_api.workflow.trace import TRACE_EVENT_TYPE
 from copilot_api.workflow.turn import Turn, TurnResult
@@ -311,6 +312,56 @@ async def test_ungrounded_answer_is_insufficient():
     )
 
     assert answer_of(await run_turn(services, "¿antigüedad laboral?")).status == "insufficient"
+
+
+def judged(verdict: str, missing: str | None = None):
+    return RelevanceVerdict(verdict=verdict, missing=missing)
+
+
+async def test_a_grounded_answer_to_another_question_is_never_ok():
+    # Every claim is cited and grounded; it just answers which documents a customer brings.
+    client = FakeChatClient({
+        RouteDecision: RouteDecision(route="procedure", search_query="documentos que se piden al cliente"),
+        ComposerOutput: composed(DraftClaim(text="Se pide cédula de identidad vigente", citation_ids=["S1"])),
+        RelevanceVerdict: judged("off_topic"),
+    })
+    services = make_services(llm=Llm(client, model="gpt-4.1-mini"), retriever=FakeRetriever([FICHA]))
+
+    events = await run_turn(services, "¿qué tipos de documentos tienes?")
+
+    answer = answer_of(events)
+    assert (answer.status, answer.message, answer.requirements) == ("rejected", CANNOT_ANSWER_MESSAGE, [])
+    (check,) = [event.data for event in events if event.type == TRACE_EVENT_TYPE and event.data.node == "relevance"]
+    assert check.data == {"verdict": "off_topic", "guardrail": "relevance"}
+    assert check.tokens_in == 1000
+    assert "¿qué tipos de documentos tienes?" in client.prompts[-1]
+    assert "documentos que se piden al cliente" in client.prompts[-1]
+
+
+async def test_the_composer_answers_a_follow_up_as_the_router_understood_it():
+    client = FakeChatClient({
+        RouteDecision: RouteDecision(route="procedure", search_query="¿Qué renta mínima pide la tarjeta Platinum?"),
+        ComposerOutput: composed(DraftClaim(text="Renta mínima de $1.800.000", citation_ids=["S1"])),
+    })
+    services = make_services(llm=Llm(client, model="gpt-4.1-mini"), retriever=FakeRetriever([PLATINUM]))
+
+    await run_turn(services, "¿y para la Platinum?")
+
+    (composer_prompt,) = [prompt for prompt in client.prompts if "Fuentes:" in prompt]
+    assert "Entendida como:\n¿Qué renta mínima pide la tarjeta Platinum?" in composer_prompt
+
+
+async def test_a_partial_answer_keeps_its_claims_and_says_what_it_left_out():
+    services = make_services(
+        llm=scripted(route("procedure"), composed(DraftClaim(text="12 meses", citation_ids=["S1"])), judged("partial", "la renta mínima")),
+        retriever=FakeRetriever([FICHA]),
+    )
+
+    answer = answer_of(await run_turn(services, "¿antigüedad y renta mínima para el hipotecario?"))
+
+    assert answer.status == "ok"
+    assert claim_texts(answer) == ["12 meses"]
+    assert answer.message.endswith("No encontré respaldo para esta parte de la consulta: la renta mínima.")
 
 
 ORO = chunk("ficha-tc-oro-0", "Tarjeta Oro: renta mínima $800.000, mantención $4.500 mensual, seguro de viaje nacional.")

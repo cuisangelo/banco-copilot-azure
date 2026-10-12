@@ -131,7 +131,10 @@ class Composer(Executor):
         turn.composed, usage = await self._services.llm.structured(
             ComposerOutput,
             system=self._system,
-            user=f"Consulta del asesor:\n{turn.message}\n\nFuentes:\n{_render_sources(turn.citations)}",
+            user=(
+                f"Consulta del asesor:\n{turn.message}\n\nEntendida como:\n{turn.route.search_query}\n\n"
+                f"Fuentes:\n{_render_sources(turn.citations)}"
+            ),
         )
         claims = turn.composed.requirements + turn.composed.steps
         await emit_trace(ctx, "composer", started, {"citations": len(turn.citations), "claims": len(claims)}, usage)

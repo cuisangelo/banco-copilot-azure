@@ -13,6 +13,7 @@ from copilot_api.guards.content_safety import Groundedness
 from copilot_api.mcp_bank import ToolFailed
 from copilot_api.workflow.llm import Usage
 from copilot_api.workflow.rag import Retrieval, RetrievalMode
+from copilot_api.workflow.relevance import RelevanceVerdict
 
 
 class FakeChatClient:
@@ -22,7 +23,8 @@ class FakeChatClient:
     """
 
     def __init__(self, script: dict[type[BaseModel], BaseModel | Callable[[str], BaseModel]] | None = None) -> None:
-        self.script = dict(script or {})
+        # The final relevance check passes unless a test scripts it.
+        self.script = {RelevanceVerdict: RelevanceVerdict(verdict="answers", missing=None), **(script or {})}
         self.prompts: list[str] = []
 
     async def get_response(self, messages, *, stream: bool = False, options: Any = None, **kwargs: Any) -> ChatResponse:

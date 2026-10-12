@@ -9,7 +9,11 @@ Devuelve:
 
 - `message`: una o dos frases que resumen la respuesta.
 - `requirements`: el checklist de requisitos, una afirmación por elemento.
-- `steps`: los pasos a seguir, en orden, una afirmación por paso.
+- `steps`: los pasos a seguir, en orden, una afirmación por paso. Solo si la consulta pregunta cómo
+  hacer algo; si pregunta qué es, cuánto cuesta o qué se exige, déjalo vacío.
+
+Responde la consulta tal como se entendió (la recibes reescrita, con el contexto de la conversación):
+si la consulta original es una continuación ("¿y para la Platinum?"), responde solo lo que se pidió.
 
 Cada afirmación lleva `citation_ids` con los ids de las fuentes que la sustentan. Si no tienes fuente
 para algo, no lo afirmes.

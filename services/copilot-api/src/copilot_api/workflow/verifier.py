@@ -6,8 +6,9 @@ from bank_contracts.models import LEVEL2_FIELDS, ChatAnswer, Claim
 
 from copilot_api.workflow.composer import DraftClaim
 from copilot_api.workflow.escalation import ESCALATION_EXECUTOR_ID, EscalationCase
+from copilot_api.workflow.relevance import RELEVANCE_EXECUTOR_ID
 from copilot_api.workflow.trace import emit_trace
-from copilot_api.workflow.turn import Services, Turn, TurnResult, level2_values
+from copilot_api.workflow.turn import Services, Turn
 
 UNSUPPORTED_MESSAGE = (
     "No encuentro respaldo suficiente en las fuentes para responder con seguridad. Te propongo escalar la consulta."
@@ -79,7 +80,7 @@ class Verifier(Executor):
         self._services = services
 
     @handler
-    async def run(self, turn: Turn, ctx: WorkflowContext[EscalationCase, TurnResult]) -> None:
+    async def run(self, turn: Turn, ctx: WorkflowContext[EscalationCase | Turn]) -> None:
         started = time.perf_counter()
         composed = turn.composed
         claims = composed.requirements + composed.steps
@@ -144,11 +145,11 @@ class Verifier(Executor):
                 EscalationCase(turn, answer, reason=f"contradicción sobre {conflict}"), target_id=ESCALATION_EXECUTOR_ID
             )
             return
-        answer = ChatAnswer(
+        turn.answer = ChatAnswer(
             status="ok",
             message=message + _caveats(turn),
             requirements=_claims(kept_requirements),
             steps=_claims(kept_steps),
             citations=turn.citations,
         )
-        await ctx.yield_output(TurnResult(answer, level2_values(turn)))
+        await ctx.send_message(turn, target_id=RELEVANCE_EXECUTOR_ID)

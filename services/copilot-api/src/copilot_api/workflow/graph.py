@@ -7,6 +7,7 @@ from copilot_api.workflow.escalation import Escalation
 from copilot_api.workflow.input_guard import InputGuard
 from copilot_api.workflow.products import Products
 from copilot_api.workflow.rag import Rag
+from copilot_api.workflow.relevance import Relevance
 from copilot_api.workflow.router import Router
 from copilot_api.workflow.turn import Services, Turn
 from copilot_api.workflow.verifier import Verifier
@@ -28,6 +29,7 @@ def build_workflow(services: Services, checkpoint_storage: CheckpointStorage) ->
     composer = Composer(services)
     verifier = Verifier(services)
     escalation = Escalation(services)
+    relevance = Relevance(services)
     return (
         WorkflowBuilder(name=WORKFLOW_NAME, start_executor=input_guard, checkpoint_storage=checkpoint_storage)
         .add_edge(input_guard, router)
@@ -36,6 +38,7 @@ def build_workflow(services: Services, checkpoint_storage: CheckpointStorage) ->
         .add_fan_out_edges(rag, [products, customer])
         .add_fan_in_edges([products, customer], composer)
         .add_edge(composer, verifier)
+        .add_edge(verifier, relevance)
         .add_edge(rag, escalation)
         .add_edge(composer, escalation)
         .add_edge(verifier, escalation)
