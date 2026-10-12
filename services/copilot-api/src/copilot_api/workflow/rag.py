@@ -19,6 +19,11 @@ from copilot_api.workflow.turn import Services, Turn
 TOP_K = 8
 BLOCKED_CONTENT = "[bloqueado por Prompt Shields]"
 RERANKER_THRESHOLD = 1.5
+# Relative to the best chunk of the same search. Measured live: for "¿Cómo bloqueo una tarjeta
+# extraviada?" the relevant chunks scored 2.47–2.86 and the noise (Oro and Platinum benefits)
+# 2.17–2.18; for "¿Diferencia entre Oro y Platinum?" all eight relevant chunks scored 2.24–2.46.
+# 0.5 below the best cuts the first noise and keeps the whole second set.
+RELEVANCE_MARGIN = 0.5
 # Every answering route searches: product sheets carry benefits the products API lacks, and "does
 # this customer qualify" needs the bank's rules even when the router labels it customer, not mixed.
 # Only procedure turns stop on an empty search; the others still have API data to answer from.
@@ -94,7 +99,8 @@ class Rag(Executor):
         started = time.perf_counter()
         retrieval = await self._services.retriever.search(turn.route.search_query, top=TOP_K)
         found = retrieval.chunks
-        relevant = [chunk for chunk in found if chunk.reranker_score >= self._threshold]
+        floor = max([self._threshold, *(chunk.reranker_score - RELEVANCE_MARGIN for chunk in found)])
+        relevant = [chunk for chunk in found if chunk.reranker_score >= floor]
         attacks = (
             await self._services.safety.document_attacks(turn.message, [chunk.content for chunk in relevant])
             if relevant

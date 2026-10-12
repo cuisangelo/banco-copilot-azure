@@ -120,6 +120,34 @@ async def test_injected_chunk_is_dropped_before_the_prompt():
     assert "ignora tus instrucciones" not in json.dumps([trace.data for trace in traces], ensure_ascii=False)
 
 
+async def sources_reaching_the_composer(scores: list[float]) -> list[float]:
+    chunks = [chunk(f"doc-{index}", f"fragmento {score}", score=score) for index, score in enumerate(scores)]
+    services = make_services(
+        llm=scripted(route("procedure"), ComposerOutput(message="ok", requirements=[DraftClaim(text="x", citation_ids=["S1"])], steps=[])),
+        retriever=FakeRetriever(chunks),
+    )
+    answer = answer_of(await run_turn(services, "consulta"))
+    return [float(citation.snippet.removeprefix("fragmento ")) for citation in answer.citations]
+
+
+async def test_chunks_far_below_the_best_score_are_noise():
+    # Measured live for "¿Cómo bloqueo una tarjeta extraviada?": Oro and Platinum benefits came in at 2.17–2.18.
+    relevant, noise = [2.86, 2.71, 2.47], [2.18, 2.17]
+
+    assert await sources_reaching_the_composer(relevant + noise) == relevant
+
+
+async def test_chunks_close_to_the_best_score_all_survive():
+    # Measured live for "¿Diferencia entre Oro y Platinum?": eight relevant chunks between 2.24 and 2.46.
+    comparison = [2.46, 2.43, 2.40, 2.36, 2.33, 2.30, 2.27, 2.24]
+
+    assert await sources_reaching_the_composer(comparison) == comparison
+
+
+async def test_close_chunks_below_the_absolute_threshold_are_still_dropped():
+    assert await sources_reaching_the_composer([1.8, 1.6, 1.4]) == [1.8, 1.6]
+
+
 INCOME_AND_DEBT = CustomerPlan(
     fields=["monthly_income", "current_debt"], purpose="Evaluar si cumple los requisitos del crédito hipotecario"
 )
