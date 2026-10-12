@@ -4,7 +4,9 @@ import json
 import httpx
 import pytest
 from agent_framework import InMemoryCheckpointStorage
+from agent_framework.openai import OpenAIChatCompletionClient
 from bank_contracts.models import EscalationDecision
+from openai import AsyncAzureOpenAI
 from pydantic import ValidationError
 
 from copilot_api.guards.content_safety import ContentSafety
@@ -675,3 +677,26 @@ async def test_concurrent_agents_share_five_tool_calls_across_an_access_pause():
 
     assert len(bank.calls) == 5
     assert bank.calls[-1] == ("get_customer_fields", {"customer_id": "C-1001", "fields": ["employment_tenure_months"]})
+
+
+async def test_structured_calls_reach_the_deployment_at_temperature_zero():
+    bodies = []
+
+    def responder(request: httpx.Request) -> httpx.Response:
+        bodies.append(json.loads(request.content))
+        message = {"role": "assistant", "content": route("procedure").model_dump_json()}
+        return httpx.Response(200, json={
+            "id": "c-1", "object": "chat.completion", "created": 0, "model": "gpt-4.1-mini",
+            "choices": [{"index": 0, "finish_reason": "stop", "message": message}],
+            "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
+        })
+
+    openai = AsyncAzureOpenAI(
+        azure_endpoint="https://aoai.example", api_version="2024-10-21", api_key="test",
+        http_client=httpx.AsyncClient(transport=httpx.MockTransport(responder)),
+    )
+    llm = Llm(OpenAIChatCompletionClient(model="gpt-4.1-mini", async_client=openai), model="gpt-4.1-mini")
+
+    await llm.structured(RouteDecision, system="router", user="¿Diferencia entre Oro y Platinum?")
+
+    assert bodies[0]["temperature"] == 0
