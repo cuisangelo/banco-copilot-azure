@@ -29,7 +29,7 @@ function Avatar({ persona }: { persona: PersonaKey | null }) {
 const OPTIONS: (PersonaKey | null)[] = [null, "ana", "bruno", "sofia"];
 
 export function PersonaPicker() {
-  const { session, notice, pickerOpen, setPickerOpen, signIn, signOut } = useSession();
+  const { session, notice, connecting, waking, pickerOpen, setPickerOpen, signIn, signOut } = useSession();
   const root = useRef<HTMLDivElement>(null);
   const label = session ? `${session.name}, ${session.role}` : "Sin persona";
 
@@ -49,9 +49,14 @@ export function PersonaPicker() {
   }, [pickerOpen, setPickerOpen]);
 
   async function choose(persona: PersonaKey | null) {
-    setPickerOpen(false);
-    if (persona === null) signOut();
-    else await signIn(persona);
+    if (connecting) return;
+    if (persona === null) {
+      signOut();
+      setPickerOpen(false);
+      return;
+    }
+    // The list stays open with a status line until the sign-in settles; signIn closes it on success.
+    await signIn(persona);
   }
 
   return (
@@ -78,6 +83,14 @@ export function PersonaPicker() {
           {notice && (
             <p role="alert" className="border-b border-line bg-reject/5 px-4 py-3 text-sm text-reject">
               {notice}
+            </p>
+          )}
+          {connecting && (
+            <p role="status" aria-live="polite" className="flex items-center gap-2 border-b border-line bg-sky px-4 py-3 text-sm text-navy">
+              <span className="size-3 animate-spin rounded-full border-2 border-brand border-t-transparent" aria-hidden />
+              {waking
+                ? "Conectando… el servidor está despertando (escala a cero cuando nadie lo usa); puede tardar unos 20 s."
+                : `Conectando como ${PERSONAS[connecting].name}…`}
             </p>
           )}
         <ul role="listbox" aria-label="Elige una persona de demo" className="py-2">
