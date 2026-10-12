@@ -47,7 +47,8 @@ def main() -> None:
     (vault,) = json.loads(az("keyvault", "list", "-g", resource_group, "--query", "[].name"))
     env = deployed_env(resource_group, "mcp-bank", vault) | deployed_env(resource_group, "copilot-api", vault) | LOCAL
     (ROOT / ".env.local").write_text(dotenv(dict(sorted(env.items()))))
-    (ROOT / "web" / ".env.local").write_text(dotenv({"NEXT_PUBLIC_API_BASE_URL": "http://localhost:8000"}))
+    # uvicorn listens on IPv4 only: "localhost" may resolve to ::1, where another local service can own :8000.
+    (ROOT / "web" / ".env.local").write_text(dotenv({"NEXT_PUBLIC_API_BASE_URL": "http://127.0.0.1:8000"}))
     print(f"wrote .env.local ({len(env)} settings) and web/.env.local")
 
 
