@@ -86,6 +86,8 @@ resource "azurerm_eventgrid_system_topic_event_subscription" "docs" {
   }
 
   webhook_endpoint {
-    url = "https://${azurerm_function_app_flex_consumption.ingest.default_hostname}/runtime/webhooks/blobs?functionName=Host.Functions.${local.ingest_function_name}&code=${data.azurerm_function_app_host_keys.ingest[0].blobs_extension_key}"
+    url                               = "https://${azurerm_function_app_flex_consumption.ingest.default_hostname}/runtime/webhooks/blobs?functionName=Host.Functions.${local.ingest_function_name}&code=${data.azurerm_function_app_host_keys.ingest[0].blobs_extension_key}"
+    max_events_per_batch              = 1
+    preferred_batch_size_in_kilobytes = 64
   }
 }

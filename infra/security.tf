@@ -199,11 +199,26 @@ resource "azurerm_federated_identity_credential" "github_main" {
   subject   = "repo:${var.github_repository}:ref:refs/heads/main"
 }
 
+# evals.yml runs on pull requests, whose OIDC subject differs from a branch push. GitHub does not
+# issue OIDC tokens to pull requests from forks, so only branches of this repository can use it.
+resource "azurerm_federated_identity_credential" "github_pull_request" {
+  count = var.github_repository == null ? 0 : 1
+
+  name      = "github-pull-request"
+  parent_id = azurerm_user_assigned_identity.github_deploy.id
+  audience  = ["api://AzureADTokenExchange"]
+  issuer    = "https://token.actions.githubusercontent.com"
+  subject   = "repo:${var.github_repository}:pull_request"
+}
+
 resource "azurerm_role_assignment" "github_deploy" {
   for_each = merge(
     { "acr-push" = { role = "AcrPush", scope = azurerm_container_registry.main.id } },
     { for svc in local.services : "app/${svc}" => { role = "Contributor", scope = azurerm_container_app.app[svc].id } },
     { "ingest-function" = { role = "Website Contributor", scope = azurerm_function_app_flex_consumption.ingest.id } },
+    # evals.yml: the LLM judges call the chat deployment and the run is uploaded to the Foundry project.
+    { "evals-openai" = { role = "Cognitive Services OpenAI User", scope = azapi_resource.foundry.id } },
+    { "evals-foundry" = { role = "Foundry User", scope = azapi_resource.foundry.id } },
   )
 
   scope                = each.value.scope
