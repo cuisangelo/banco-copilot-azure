@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { ApiError, createDemoSession, resumeSession, sendFeedback, streamChat } from "@/lib/api";
+import { ApiError, createDemoSession, getRetrievalModes, resumeSession, sendFeedback, streamChat } from "@/lib/api";
 import type { ChatEvent } from "@/lib/api";
 import { SessionProvider } from "@/lib/session";
 import type { AccessRequest, ChatAnswer } from "@/lib/types";
@@ -11,6 +11,7 @@ import { PersonaPicker } from "./PersonaPicker";
 vi.mock("@/lib/api", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/api")>()),
   createDemoSession: vi.fn(),
+  getRetrievalModes: vi.fn(),
   streamChat: vi.fn(),
   resumeSession: vi.fn(),
   sendFeedback: vi.fn(),
@@ -81,10 +82,29 @@ async function ask(text: string) {
 beforeEach(() => {
   vi.mocked(streamChat).mockReset();
   vi.mocked(resumeSession).mockReset();
+  vi.mocked(getRetrievalModes).mockResolvedValue(["hybrid"]);
   vi.mocked(createDemoSession).mockResolvedValue({ token: "tok-ana", name: "Ana", role: "Asesor" });
 });
 
 describe("Chat", () => {
+  it("hides the search mode while copilot-api offers only hybrid retrieval", async () => {
+    renderChat();
+
+    await vi.waitFor(() => expect(getRetrievalModes).toHaveBeenCalled());
+    expect(screen.queryByRole("radio", { name: "Agéntica" })).not.toBeInTheDocument();
+  });
+
+  it("sends the chosen search mode once copilot-api offers agentic retrieval", async () => {
+    vi.mocked(getRetrievalModes).mockResolvedValue(["hybrid", "agentic"]);
+    vi.mocked(streamChat).mockReturnValue(events({ type: "answer", payload: answer({}) }));
+    renderChat();
+
+    await userEvent.click(await screen.findByRole("radio", { name: "Agéntica" }));
+    await ask("¿Diferencia entre Oro y Platinum?");
+
+    expect(vi.mocked(streamChat).mock.calls[0][0].retrieval_mode).toBe("agentic");
+  });
+
   it("rejects a malformed customer id before sending", async () => {
     renderChat();
     await userEvent.type(screen.getByLabelText("Cliente en atención"), "1042");
@@ -107,7 +127,12 @@ describe("Chat", () => {
     await ask("¿Qué le pido?");
 
     const [body, token] = vi.mocked(streamChat).mock.calls[0];
-    expect(body).toEqual({ session_id: expect.any(String), message: "¿Qué le pido?", customer_id: "C-1042" });
+    expect(body).toEqual({
+      session_id: expect.any(String),
+      message: "¿Qué le pido?",
+      customer_id: "C-1042",
+      retrieval_mode: "hybrid",
+    });
     expect(token).toBe("tok-ana");
     expect(await screen.findByText("Pide la cédula.")).toBeInTheDocument();
     expect(screen.getByRole("log")).toHaveAttribute("aria-live", "polite");
@@ -119,7 +144,7 @@ describe("Chat", () => {
     await ask("¿Tasa de la tarjeta Oro?");
 
     expect(vi.mocked(streamChat).mock.calls[0]).toEqual([
-      { session_id: expect.any(String), message: "¿Tasa de la tarjeta Oro?", customer_id: null },
+      { session_id: expect.any(String), message: "¿Tasa de la tarjeta Oro?", customer_id: null, retrieval_mode: "hybrid" },
       null,
     ]);
   });

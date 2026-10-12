@@ -9,6 +9,22 @@ const traces: TraceEvent[] = [
 ];
 
 describe("Inspector", () => {
+  it("lists the subqueries an agentic search planned", () => {
+    const agentic: TraceEvent = {
+      node: "rag_agent",
+      duration_ms: 2100,
+      data: { chunks: [], retrieval_mode: "agentic", subqueries: ["renta Tarjeta Oro", "renta Tarjeta Platinum"] },
+      tokens_in: 800,
+      tokens_out: 60,
+      cost_usd: 0.0004,
+    };
+    render(<Inspector turns={[{ id: "t1", title: "¿Oro o Platinum?", traces: [agentic] }]} />);
+
+    const row = screen.getByText("Búsqueda en documentos").closest("li")!;
+    expect(row).toHaveTextContent("Búsqueda agéntica · 2 subconsultas");
+    expect(within(row).getByText("renta Tarjeta Platinum")).toBeVisible();
+  });
+
   it("lists each node with duration, tokens and cost", () => {
     render(<Inspector turns={[{ id: "t1", title: "¿Qué le pido?", traces }]} />);
     const row = screen.getByText("Clasificación").closest("li")!;
