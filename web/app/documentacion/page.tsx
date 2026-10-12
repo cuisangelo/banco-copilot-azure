@@ -2,7 +2,6 @@
 // subscription and portal links reach the browser from /privado/inventario.json, served to the owner only.
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ApiStatus } from "@/components/ApiStatus";
 import { FIELD_LABEL, NODE_LABEL } from "@/lib/labels";
 import { GRANT_MINUTES, LEVEL2_FIELDS } from "@/lib/types";
 import { ArchitectureDiagram } from "./ArchitectureDiagram";
@@ -15,16 +14,12 @@ export const metadata: Metadata = {
   description: "Arquitectura, workflow y recursos desplegados del copiloto de atención.",
 };
 
-// Guaranteed at build time by next.config.ts.
-const JWKS_URL = `${process.env.NEXT_PUBLIC_API_BASE_URL}/.well-known/jwks.json`;
-
 const SECTIONS = [
   { id: "arquitectura", label: "Arquitectura" },
   { id: "workflow", label: "Workflow" },
   { id: "busqueda", label: "Búsqueda" },
   { id: "niveles", label: "Niveles de acceso" },
   { id: "recursos", label: "Recursos en Azure" },
-  { id: "evidencia", label: "Evidencia pública" },
   { id: "decisiones", label: "Decisiones" },
   { id: "produccion", label: "Producción objetivo" },
 ];
@@ -395,40 +390,6 @@ export default function DocumentationPage() {
           lead="Todo vive en un grupo de recursos y se crea con Terraform."
         >
           <ResourceList layout={layout} />
-        </Section>
-
-        <Section
-          id="evidencia"
-          title="Evidencia pública"
-          lead="Esto lo puede comprobar cualquiera, sin acceso a la suscripción."
-        >
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="rounded-2xl bg-white p-5 shadow-soft ring-1 ring-line">
-              <h3 className="text-sm font-semibold text-muted">Estado en vivo de copilot-api</h3>
-              <div className="mt-2">
-                <ApiStatus />
-              </div>
-              <p className="mt-2 text-sm leading-relaxed text-muted">
-                Medido desde tu navegador al abrir esta página. Sin tráfico, Container Apps escala a cero y el primer
-                pedido tarda más.
-              </p>
-            </div>
-            <div className="rounded-2xl bg-white p-5 shadow-soft ring-1 ring-line">
-              <h3 className="text-sm font-semibold text-muted">Firma de los tokens</h3>
-              <p className="mt-2 leading-relaxed text-ink">
-                copilot-api publica la{" "}
-                <a
-                  href={JWKS_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="font-semibold text-brand underline underline-offset-2 hover:text-brand-hover"
-                >
-                  llave pública de las personas demo
-                </a>
-                . customers-api verifica con ella cada JWT; solo copilot-api firma, con la llave privada en Key Vault.
-              </p>
-            </div>
-          </div>
         </Section>
 
         <Section id="decisiones" title="Decisiones y tradeoffs">

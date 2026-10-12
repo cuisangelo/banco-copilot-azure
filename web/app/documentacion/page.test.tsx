@@ -99,12 +99,4 @@ describe("/documentacion", () => {
       "/.auth/logout?post_logout_redirect_uri=/documentacion",
     );
   });
-
-  it("links the public key anyone can verify", () => {
-    renderPage(false);
-    expect(screen.getByRole("link", { name: "llave pública de las personas demo" })).toHaveAttribute(
-      "href",
-      "http://api.test/.well-known/jwks.json",
-    );
-  });
 });
