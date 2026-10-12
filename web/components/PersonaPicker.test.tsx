@@ -1,11 +1,14 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createDemoSession } from "@/lib/api";
+import { ApiError, createDemoSession } from "@/lib/api";
 import { SessionProvider, useSession } from "@/lib/session";
 import { PersonaPicker } from "./PersonaPicker";
 
-vi.mock("@/lib/api", () => ({ createDemoSession: vi.fn() }));
+vi.mock("@/lib/api", async (importOriginal) => ({
+  ApiError: (await importOriginal<typeof import("@/lib/api")>()).ApiError,
+  createDemoSession: vi.fn(),
+}));
 
 function ExpireHandle() {
   return <button onClick={useSession().expire}>simular 401</button>;
@@ -21,6 +24,7 @@ function renderPicker() {
 }
 
 beforeEach(() => {
+  vi.mocked(createDemoSession).mockReset();
   vi.mocked(createDemoSession).mockResolvedValue({ token: "tok-ana", name: "Ana", role: "Asesor" });
 });
 
@@ -60,5 +64,50 @@ describe("PersonaPicker", () => {
     expect(screen.getByRole("alert")).toHaveTextContent(/venció/);
     expect(screen.getByRole("listbox")).toBeVisible();
     expect(screen.getByRole("button", { name: /persona/i })).toHaveTextContent("Sin persona");
+  });
+});
+
+describe("PersonaPicker against a scaled-to-zero API", () => {
+  function renderWithInstantRetries() {
+    render(
+      <SessionProvider retryDelaysMs={[0, 0, 0]}>
+        <PersonaPicker />
+      </SessionProvider>,
+    );
+  }
+
+  it("retries while the server wakes up and then signs in", async () => {
+    vi.mocked(createDemoSession)
+      .mockRejectedValueOnce(new ApiError(503))
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValueOnce({ token: "tok-ana", name: "Ana", role: "Asesor" });
+    renderWithInstantRetries();
+
+    await userEvent.click(screen.getByRole("button", { name: /persona/i }));
+    await userEvent.click(screen.getByRole("option", { name: /Ana/ }));
+
+    expect(await screen.findByRole("button", { name: /Ana, Asesor/ })).toBeInTheDocument();
+    expect(createDemoSession).toHaveBeenCalledTimes(3);
+  });
+
+  it("does not retry errors that are not a cold start", async () => {
+    vi.mocked(createDemoSession).mockRejectedValue(new ApiError(400));
+    renderWithInstantRetries();
+
+    await userEvent.click(screen.getByRole("button", { name: /persona/i }));
+    await userEvent.click(screen.getByRole("option", { name: /Ana/ }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/No se pudo iniciar/);
+    expect(createDemoSession).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows that it is connecting instead of closing silently", async () => {
+    vi.mocked(createDemoSession).mockReturnValue(new Promise(() => {}));
+    renderWithInstantRetries();
+
+    await userEvent.click(screen.getByRole("button", { name: /persona/i }));
+    await userEvent.click(screen.getByRole("option", { name: /Ana/ }));
+
+    expect(screen.getByRole("status")).toHaveTextContent(/Conectando/);
   });
 });
