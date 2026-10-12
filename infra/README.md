@@ -57,7 +57,7 @@ Terraform crea la identidad `*-github-deploy-id`, con AcrPush, Contributor sobre
 Website Contributor sobre la Function. La credencial federada se crea cuando existe el repo remoto:
 
 ```sh
-terraform -chdir=infra apply -var github_repository=<owner>/<repo>
+terraform -chdir=infra apply -var github_repository=<owner>@<owner id>/<repo>@<repo id>   # ids: gh api repos/<owner>/<repo> --jq ".owner.id, .id"
 terraform -chdir=infra output github_deploy   # copiar cada clave como *secret* del repo en GitHub (los logs son públicos)
 ```
 

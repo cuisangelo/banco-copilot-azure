@@ -147,3 +147,31 @@ run "budget_alerts_at_50_and_100_usd" {
     error_message = "Budget alerts must fire at USD 50 and USD 100."
   }
 }
+
+run "oidc_repository_rejects_the_plain_owner_repo_form" {
+  command = plan
+
+  variables {
+    github_repository = "owner/repo"
+  }
+
+  expect_failures = [var.github_repository]
+}
+
+run "oidc_subjects_use_github_immutable_ids" {
+  command = plan
+
+  variables {
+    github_repository = "owner@1/repo@2"
+  }
+
+  assert {
+    condition     = azurerm_federated_identity_credential.github_main[0].subject == "repo:owner@1/repo@2:ref:refs/heads/main"
+    error_message = "The main-branch subject must use GitHub's immutable-id form."
+  }
+
+  assert {
+    condition     = azurerm_federated_identity_credential.github_pull_request[0].subject == "repo:owner@1/repo@2:pull_request"
+    error_message = "The pull-request subject must use GitHub's immutable-id form."
+  }
+}
