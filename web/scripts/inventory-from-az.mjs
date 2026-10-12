@@ -36,6 +36,8 @@ export function buildInventory(account, azResources, resourceGroup) {
     const type = resource.type.toLowerCase();
     // Identities, Foundry projects, workbooks, plans and alert groups exist but are not drawn.
     if (!DRAWN_TYPES.has(type)) continue;
+    // The diagram shows the permanent architecture; the Basic search for agentic retrieval is up only for demos.
+    if (/-agentic-search$/.test(resource.name)) continue;
     const rules = RULES.filter((rule) => rule.type.toLowerCase() === type && (!rule.match || rule.match.test(resource.name)));
     if (rules.length !== 1) {
       throw new Error(`cannot map ${resource.name} (${resource.type}) to one drawn resource: ${rules.length} rules match`);
