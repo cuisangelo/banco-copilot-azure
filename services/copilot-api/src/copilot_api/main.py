@@ -24,6 +24,7 @@ from bank_contracts.models import (
     ErrorEvent,
     Feedback,
     FeedbackCreate,
+    RetrievalMode,
 )
 from bank_contracts.settings import require_env
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
@@ -83,7 +84,7 @@ class Deps:
     store: InMemoryStore | CosmosStore
     llm: Llm
     safety: Safety
-    retriever: Retriever
+    retrievers: dict[RetrievalMode, Retriever]
     connect_bank: Callable[[str | None], AbstractAsyncContextManager[BankTools]]
     grants: GrantsClient
     token_cap: TokenCap
@@ -178,8 +179,9 @@ def create_app(deps: Deps) -> FastAPI:
         for checkpoint in await storage.list_checkpoints(workflow_name=WORKFLOW_NAME):
             await storage.delete(checkpoint.checkpoint_id)
 
-    def workflow_for(session_id: str, bank: BankTools) -> Workflow:
-        services = Services(llm=deps.llm, safety=deps.safety, store=deps.store, retriever=deps.retriever, bank=bank)
+    def workflow_for(session_id: str, bank: BankTools, mode: RetrievalMode) -> Workflow:
+        retriever = deps.retrievers[mode]
+        services = Services(llm=deps.llm, safety=deps.safety, store=deps.store, retriever=retriever, bank=bank)
         return build_workflow(services, deps.store.checkpoint_storage(session_id))
 
     def stream_turn(
@@ -187,13 +189,14 @@ def create_app(deps: Deps) -> FastAPI:
         who: Caller,
         question: str,
         customer_id: str | None,
+        mode: RetrievalMode,
         run: Callable[[Workflow], AsyncIterator[WorkflowEvent]],
     ) -> StreamingResponse:
         async def events() -> AsyncIterator[str]:
             tokens, result, pending = 0, None, None
             try:
                 async with deps.connect_bank(who.token) as bank:
-                    workflow = workflow_for(session.session_id, bank)
+                    workflow = workflow_for(session.session_id, bank, mode)
                     async for event in run(workflow):
                         if event.type == TRACE_EVENT_TYPE:
                             tokens += event.data.tokens_in + event.data.tokens_out
@@ -243,8 +246,14 @@ def create_app(deps: Deps) -> FastAPI:
     def jwks() -> dict:
         return deps.personas.jwks()
 
+    @app.get("/status")
+    def status() -> dict:
+        return {"retrieval_modes": list(deps.retrievers)}
+
     @app.post("/chat", dependencies=[Depends(rate_limited)])
     async def chat(body: ChatRequest, who: Caller = Depends(caller)) -> StreamingResponse:
+        if body.retrieval_mode not in deps.retrievers:
+            raise HTTPException(409, "La búsqueda agéntica no está activa en este momento.")
         await within_token_cap()
         existing = await deps.store.get_session(body.session_id)
         session = owned(existing, who) if existing else SessionRecord(session_id=body.session_id, owner=who.sub)
@@ -257,7 +266,12 @@ def create_app(deps: Deps) -> FastAPI:
             history=[entry for entry in session.history if entry.customer_id == body.customer_id],
         )
         return stream_turn(
-            session, who, body.message, body.customer_id, lambda workflow: workflow.run(turn, stream=True)
+            session,
+            who,
+            body.message,
+            body.customer_id,
+            body.retrieval_mode,
+            lambda workflow: workflow.run(turn, stream=True),
         )
 
     @app.post("/sessions/{session_id}/resume", dependencies=[Depends(rate_limited)])
@@ -275,6 +289,8 @@ def create_app(deps: Deps) -> FastAPI:
             who,
             pending.question,
             pending.customer_id,
+            # A resumed run restores its chunks from the checkpoint and never searches again.
+            "hybrid",
             lambda workflow: workflow.run(
                 responses={pending.request_id: decided}, checkpoint_id=pending.checkpoint_id, stream=True
             ),
@@ -285,7 +301,7 @@ def create_app(deps: Deps) -> FastAPI:
         session = owned(await deps.store.find_session_by_escalation(escalation_id), who)
         outcomes = []
         async with deps.connect_bank(who.token) as bank:
-            workflow = workflow_for(session.session_id, bank)
+            workflow = workflow_for(session.session_id, bank, "hybrid")
             async for event in workflow.run(
                 responses={escalation_id: body}, checkpoint_id=session.pending.checkpoint_id, stream=True
             ):
@@ -399,13 +415,15 @@ def deps_from_env() -> Deps:
         return (await credential.get_token(SEARCH_SCOPE)).token
 
     http = httpx.AsyncClient(timeout=30)
-    retrieval_mode = require_env("RETRIEVAL_MODE")
-    if retrieval_mode == "hybrid":
-        retriever = AzureSearchRetriever(search, embeddings)
-    elif retrieval_mode == "agentic":
-        retriever = AgenticRetriever(search_endpoint, http=http, token_provider=search_token, model=chat_deployment)
-    else:
-        raise RuntimeError(f"RETRIEVAL_MODE must be hybrid or agentic, not {retrieval_mode!r}")
+    retrievers: dict[RetrievalMode, Retriever] = {"hybrid": AzureSearchRetriever(search, embeddings)}
+    modes = require_env("RETRIEVAL_MODES").split(",")
+    if modes == ["hybrid", "agentic"]:
+        # Agentic retrieval needs a Basic search service, so it lives on its own one, up only for demos.
+        retrievers["agentic"] = AgenticRetriever(
+            require_env("AGENTIC_SEARCH_ENDPOINT"), http=http, token_provider=search_token, model=chat_deployment
+        )
+    elif modes != ["hybrid"]:
+        raise RuntimeError(f"RETRIEVAL_MODES must be hybrid or hybrid,agentic, not {','.join(modes)!r}")
     cosmos = CosmosClient(require_env("COSMOS_ENDPOINT"), credential=credential)
     store = CosmosStore(cosmos.get_database_client(require_env("COSMOS_DATABASE")))
     mcp_bank_url = require_env("MCP_BANK_URL")
@@ -418,7 +436,7 @@ def deps_from_env() -> Deps:
         safety=ContentSafety(
             endpoint=require_env("CONTENT_SAFETY_ENDPOINT"), http=http, token_provider=cognitive_services_token
         ),
-        retriever=retriever,
+        retrievers=retrievers,
         connect_bank=lambda token: McpBankTools.connect(mcp_bank_url, token=token),
         grants=GrantsClient(
             apim_base_url=require_env("APIM_BASE_URL"),

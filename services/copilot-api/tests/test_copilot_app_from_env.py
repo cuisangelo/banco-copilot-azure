@@ -22,7 +22,7 @@ REQUIRED = [
     "PERSONA_KEY_ID",
     "DAILY_TOKEN_CAP",
     "CORS_ORIGIN",
-    "RETRIEVAL_MODE",
+    "RETRIEVAL_MODES",
 ]
 
 
@@ -45,7 +45,7 @@ def env(monkeypatch, private_key_pem):
         "PERSONA_KEY_ID": "persona-1",
         "DAILY_TOKEN_CAP": "2000000",
         "CORS_ORIGIN": "https://web.example",
-        "RETRIEVAL_MODE": "hybrid",
+        "RETRIEVAL_MODES": "hybrid",
     }
     for name, value in values.items():
         monkeypatch.setenv(name, value)
@@ -69,15 +69,33 @@ def test_chat_goes_through_chat_completions_with_the_configured_api_version(env)
     assert deps.llm.model == "gpt-4.1-mini"
 
 
-@pytest.mark.parametrize(("mode", "retriever"), [("hybrid", AzureSearchRetriever), ("agentic", AgenticRetriever)])
-def test_retrieval_mode_picks_the_retriever(env, mode, retriever):
-    env.setenv("RETRIEVAL_MODE", mode)
+def test_hybrid_alone_needs_no_agentic_endpoint(env):
+    retrievers = deps_from_env().retrievers
 
-    assert isinstance(deps_from_env().retriever, retriever)
+    assert list(retrievers) == ["hybrid"]
+    assert isinstance(retrievers["hybrid"], AzureSearchRetriever)
 
 
-def test_unknown_retrieval_mode_fails_at_startup(env):
-    env.setenv("RETRIEVAL_MODE", "semantic")
+def test_agentic_mode_runs_on_its_own_search_service(env):
+    env.setenv("RETRIEVAL_MODES", "hybrid,agentic")
+    env.setenv("AGENTIC_SEARCH_ENDPOINT", "https://agentic-search.example")
 
-    with pytest.raises(RuntimeError, match="RETRIEVAL_MODE"):
+    agentic = deps_from_env().retrievers["agentic"]
+
+    assert isinstance(agentic, AgenticRetriever)
+    assert agentic._endpoint == "https://agentic-search.example"
+
+
+def test_agentic_mode_without_its_endpoint_fails_at_startup(env):
+    env.setenv("RETRIEVAL_MODES", "hybrid,agentic")
+
+    with pytest.raises(RuntimeError, match="AGENTIC_SEARCH_ENDPOINT"):
+        deps_from_env()
+
+
+@pytest.mark.parametrize("modes", ["agentic", "semantic", "hybrid,semantic"])
+def test_unknown_retrieval_modes_fail_at_startup(env, modes):
+    env.setenv("RETRIEVAL_MODES", modes)
+
+    with pytest.raises(RuntimeError, match="RETRIEVAL_MODES"):
         deps_from_env()

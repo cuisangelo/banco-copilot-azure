@@ -41,7 +41,7 @@ run "every_required_env_var_from_the_contracts_is_set" {
           "APIM_BASE_URL", "APIM_SUBSCRIPTION_KEY", "AZURE_OPENAI_ENDPOINT", "AZURE_OPENAI_CHAT_DEPLOYMENT",
           "AZURE_OPENAI_EMBEDDING_DEPLOYMENT", "AZURE_OPENAI_API_VERSION", "SEARCH_ENDPOINT", "SEARCH_INDEX",
           "CONTENT_SAFETY_ENDPOINT", "COSMOS_ENDPOINT", "COSMOS_DATABASE", "MCP_BANK_URL", "PERSONA_PRIVATE_KEY_PEM",
-          "PERSONA_KEY_ID", "DAILY_TOKEN_CAP", "CORS_ORIGIN", "APPLICATIONINSIGHTS_CONNECTION_STRING", "RETRIEVAL_MODE",
+          "PERSONA_KEY_ID", "DAILY_TOKEN_CAP", "CORS_ORIGIN", "APPLICATIONINSIGHTS_CONNECTION_STRING", "RETRIEVAL_MODES",
         ]
       } : length(setsubtract(names, azurerm_container_app.app[app].template[0].container[0].env[*].name)) == 0
     ])
@@ -134,6 +134,40 @@ run "state_store_matches_the_contracts_and_stays_free" {
   assert {
     condition     = azurerm_search_service.main.sku == "free"
     error_message = "AI Search must stay on the free SKU."
+  }
+
+  assert {
+    condition     = length(azurerm_search_service.agentic) == 0
+    error_message = "The billed Basic search service for agentic retrieval exists only when agentic_search_enabled is set."
+  }
+}
+
+run "agentic_mode_gets_a_basic_search_reachable_only_with_identities" {
+  command = plan
+
+  variables {
+    agentic_search_enabled = true
+  }
+
+  assert {
+    condition     = azurerm_search_service.agentic[0].sku == "basic" && !azurerm_search_service.agentic[0].local_authentication_enabled
+    error_message = "Agentic retrieval needs a Basic search service with key auth disabled."
+  }
+
+  assert {
+    condition = (
+      azurerm_role_assignment.service["copilot-api/agentic-search"].role_definition_name == "Search Index Data Reader" &&
+      azurerm_role_assignment.service["agentic-search/openai"].role_definition_name == "Cognitive Services OpenAI User"
+    )
+    error_message = "copilot-api must read the agentic index and the search service must call the planner model with identities."
+  }
+
+  assert {
+    condition = [
+      for env in azurerm_container_app.app["copilot-api"].template[0].container[0].env : env.value
+      if env.name == "RETRIEVAL_MODES"
+    ] == ["hybrid,agentic"]
+    error_message = "copilot-api must offer the agentic mode when its search service exists."
   }
 }
 

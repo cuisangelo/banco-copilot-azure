@@ -1,12 +1,11 @@
 import time
 from dataclasses import dataclass, field
-from typing import Literal
 
 from agent_framework import Executor, WorkflowContext, handler
 from agent_framework.openai import OpenAIEmbeddingClient
 from azure.search.documents.aio import SearchClient
 from azure.search.documents.models import VectorizedQuery
-from bank_contracts.models import ChatAnswer
+from bank_contracts.models import ChatAnswer, RetrievalMode
 from pydantic import BaseModel
 
 from copilot_api.workflow.escalation import ESCALATION_EXECUTOR_ID, EscalationCase
@@ -40,9 +39,6 @@ class Chunk(BaseModel):
     section: str
     content: str
     reranker_score: float
-
-
-RetrievalMode = Literal["hybrid", "agentic"]
 
 
 @dataclass

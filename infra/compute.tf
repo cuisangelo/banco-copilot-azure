@@ -83,10 +83,11 @@ locals {
         DAILY_TOKEN_CAP                       = tostring(var.daily_token_cap)
         CORS_ORIGIN                           = "https://${var.web_custom_domain}"
         APPLICATIONINSIGHTS_CONNECTION_STRING = azurerm_application_insights.main.connection_string
-        # agentic needs the knowledge base from scripts/create_knowledge_base.py; it stays hybrid
-        # until the evals show agentic retrieval answers better.
-        RETRIEVAL_MODE = "hybrid"
-      })
+        RETRIEVAL_MODES                       = var.agentic_search_enabled ? "hybrid,agentic" : "hybrid"
+        }, var.agentic_search_enabled ? {
+        # Answers only once scripts/create_knowledge_base.py has built the knowledge base on it.
+        AGENTIC_SEARCH_ENDPOINT = "https://${one(azurerm_search_service.agentic[*].name)}.search.windows.net"
+      } : {})
       secret_env = {
         APIM_SUBSCRIPTION_KEY   = "apim-subscription-key"
         PERSONA_PRIVATE_KEY_PEM = "persona-private-key-pem"
