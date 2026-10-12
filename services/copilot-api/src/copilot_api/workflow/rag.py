@@ -18,6 +18,7 @@ from copilot_api.workflow.turn import Services, Turn
 # product's claims ungrounded.
 TOP_K = 8
 BLOCKED_CONTENT = "[bloqueado por Prompt Shields]"
+UNCHECKED_CONTENT = "[bajo el umbral de relevancia: no se verificó ni llegó al modelo]"
 RERANKER_THRESHOLD = 1.5
 # Relative to the best chunk of the same search. Measured live: for "¿Cómo bloqueo una tarjeta
 # extraviada?" the relevant chunks scored 2.47–2.86 and the noise (Oro and Platinum benefits)
@@ -126,8 +127,13 @@ class Rag(Executor):
                         "doc_id": chunk.doc_id,
                         "section": chunk.section,
                         "score": chunk.reranker_score,
-                        # Injected text never reaches the model, and it does not reach the inspector either.
-                        "content": BLOCKED_CONTENT if chunk.id in dropped else chunk.content,
+                        # The inspector shows only text Prompt Shields checked and passed: injected text
+                        # reaches neither the model nor the inspector.
+                        "content": BLOCKED_CONTENT
+                        if chunk.id in dropped
+                        else chunk.content
+                        if chunk in turn.chunks
+                        else UNCHECKED_CONTENT,
                     }
                     for chunk in found
                 ],
