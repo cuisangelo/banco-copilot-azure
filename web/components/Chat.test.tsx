@@ -87,6 +87,29 @@ beforeEach(() => {
 });
 
 describe("Chat", () => {
+  it("shows how the copilot understood the question", async () => {
+    vi.mocked(streamChat).mockReturnValue(
+      events(
+        {
+          type: "trace",
+          payload: {
+            node: "router",
+            duration_ms: 5,
+            data: { route: "product", understood_as: "¿Qué renta mínima pide la tarjeta Platinum?" },
+            tokens_in: 1,
+            tokens_out: 1,
+            cost_usd: 0,
+          },
+        },
+        { type: "answer", payload: answer({}) },
+      ),
+    );
+    renderChat();
+    await ask("¿y para la Platinum?");
+
+    expect(await screen.findByText("Entendí: ¿Qué renta mínima pide la tarjeta Platinum?")).toBeVisible();
+  });
+
   it("hides the search mode while copilot-api offers only hybrid retrieval", async () => {
     renderChat();
 

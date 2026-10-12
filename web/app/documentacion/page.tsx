@@ -53,6 +53,10 @@ const WORKFLOW: { node: string; text: string; hitl?: boolean }[] = [
     text: "Comprueba groundedness, que cada afirmación tenga cita y que dos fuentes no den valores distintos para lo mismo.",
   },
   {
+    node: "relevance",
+    text: "Revisa que la respuesta conteste lo que se preguntó. Si trata otra cosa, responde que no puede ayudar con eso; si cubre una parte, dice qué faltó.",
+  },
+  {
     node: "escalation",
     text: "Si falta información o hay contradicción, propone un ticket redactado. Solo se crea si el asesor lo aprueba.",
     hitl: true,

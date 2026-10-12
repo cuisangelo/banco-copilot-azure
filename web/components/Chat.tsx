@@ -42,6 +42,11 @@ const MODE_LABELS: [RetrievalMode, string][] = [
   ["agentic", "Agéntica"],
 ];
 
+function understoodAs(traces: TraceEvent[]): string | null {
+  const router = traces.find((trace) => trace.node === "router");
+  return typeof router?.data.understood_as === "string" ? router.data.understood_as : null;
+}
+
 function describeFailure(err: unknown): string {
   if (err instanceof ApiError) {
     if (err.status === 409) return "No hay nada que reanudar: esta consulta ya no espera una decisión.";
@@ -238,6 +243,9 @@ export function Chat() {
                   >
                     {turn.question ?? turn.title}
                   </p>
+                  {turn.question && understoodAs(turn.traces) && (
+                    <p className="max-w-[85%] text-right text-xs text-muted">Entendí: {understoodAs(turn.traces)}</p>
+                  )}
                 </div>
 
                 {turn.streaming && !turn.answer && (

@@ -40,6 +40,7 @@ describe("/documentacion", () => {
       "customer_agent",
       "composer",
       "verifier",
+      "relevance",
       "escalation",
     ]);
   });

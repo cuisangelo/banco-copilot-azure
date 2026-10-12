@@ -33,6 +33,7 @@ export const NODE_LABEL: Record<string, string> = {
   customer_agent: "Datos del cliente",
   composer: "Redacción",
   verifier: "Verificación de citas",
+  relevance: "Revisión de pertinencia",
   escalation: "Escalamiento",
 };
 
