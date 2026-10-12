@@ -64,10 +64,13 @@ export interface EscalationDecision {
   approve: boolean;
 }
 
+export type RetrievalMode = "hybrid" | "agentic";
+
 export interface ChatRequest {
   session_id: string;
   message: string;
   customer_id: string | null;
+  retrieval_mode: RetrievalMode;
 }
 
 export interface ChatAnswer {

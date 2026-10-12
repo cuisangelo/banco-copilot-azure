@@ -50,6 +50,16 @@ function TraceRow({ trace }: { trace: TraceEvent }) {
           <span>{formatUsd(trace.cost_usd)}</span>
         </p>
       )}
+      {Array.isArray(trace.data.subqueries) && (
+        <div className="mt-1 text-xs text-ink">
+          <p className="font-semibold">Búsqueda agéntica · {trace.data.subqueries.length} subconsultas</p>
+          <ul className="mt-0.5 list-disc pl-4">
+            {(trace.data.subqueries as string[]).map((query) => (
+              <li key={query}>{query}</li>
+            ))}
+          </ul>
+        </div>
+      )}
       {hasData && (
         <details className="mt-1 text-xs">
           <summary className="cursor-pointer text-brand">Detalle</summary>

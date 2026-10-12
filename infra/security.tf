@@ -129,6 +129,21 @@ locals {
         scope        = azurerm_key_vault_secret.secret["backend-secret"].resource_versionless_id
       }
     },
+    {
+      for key, assignment in {
+        "copilot-api/agentic-search" = {
+          principal_id = azurerm_user_assigned_identity.service["copilot-api"].principal_id
+          role         = "Search Index Data Reader"
+          scope        = one(azurerm_search_service.agentic[*].id)
+        }
+        # The knowledge base's query planner calls the chat deployment as the search service.
+        "agentic-search/openai" = {
+          principal_id = one(azurerm_search_service.agentic[*].identity[0].principal_id)
+          role         = "Cognitive Services OpenAI User"
+          scope        = azapi_resource.foundry.id
+        }
+      } : key => assignment if var.agentic_search_enabled
+    },
   )
 
   # The developer running scripts/ingest_local.py (which also creates the bank-docs index) authenticates with az login.
@@ -137,6 +152,13 @@ locals {
     "search-data"    = { role = "Search Index Data Contributor", scope = azurerm_search_service.main.id }
     "search-service" = { role = "Search Service Contributor", scope = azurerm_search_service.main.id }
     "blob"           = { role = "Storage Blob Data Contributor", scope = azurerm_storage_account.main.id }
+  }
+  # scripts/ingest_local.py and scripts/create_knowledge_base.py load the agentic service the same way.
+  agentic_deployer_roles = {
+    for key, role in {
+      "agentic-search-data"    = "Search Index Data Contributor"
+      "agentic-search-service" = "Search Service Contributor"
+    } : key => { role = role, scope = one(azurerm_search_service.agentic[*].id) } if var.agentic_search_enabled
   }
 
   cosmos_roles = {
@@ -160,7 +182,7 @@ resource "azurerm_role_assignment" "service" {
 }
 
 resource "azurerm_role_assignment" "deployer" {
-  for_each = local.deployer_roles
+  for_each = merge(local.deployer_roles, local.agentic_deployer_roles)
 
   scope                = each.value.scope
   role_definition_name = each.value.role

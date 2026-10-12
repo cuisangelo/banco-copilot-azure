@@ -66,3 +66,9 @@ variable "ingest_trigger_enabled" {
   description = "Create the Event Grid subscription to the ingest function. Its webhook handshake only succeeds once the function code is deployed, so this is a second apply."
   default     = false
 }
+
+variable "agentic_search_enabled" {
+  type        = bool
+  description = "Create the Basic search service that agentic retrieval needs (about USD 0.10 per hour) and offer the agentic mode in copilot-api. On only for demos."
+  default     = false
+}

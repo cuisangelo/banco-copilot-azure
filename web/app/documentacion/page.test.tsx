@@ -44,6 +44,15 @@ describe("/documentacion", () => {
     ]);
   });
 
+  it("contrasts the two retrieval modes", () => {
+    render(<DocumentationPage />);
+    const section = screen.getByRole("region", { name: "Búsqueda: híbrida o agéntica" });
+    expect(within(section).getAllByRole("heading", { level: 3 }).map((h) => h.textContent)).toEqual([
+      "RAG híbridohybrid",
+      "Agénticaagentic",
+    ]);
+  });
+
   it("links every deployed resource to its own page in the Azure portal", () => {
     render(<DocumentationPage />);
     const rows = within(screen.getByRole("list", { name: "Recursos desplegados" })).getAllByRole("listitem");

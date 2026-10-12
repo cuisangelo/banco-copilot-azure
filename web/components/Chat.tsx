@@ -1,10 +1,16 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ApiError, resumeSession, streamChat, type ChatEvent } from "@/lib/api";
+import { ApiError, getRetrievalModes, resumeSession, streamChat, type ChatEvent } from "@/lib/api";
 import { nodeLabel } from "@/lib/labels";
 import { useSession } from "@/lib/session";
-import { CUSTOMER_ID_PATTERN, type AccessRequest, type ChatAnswer, type TraceEvent } from "@/lib/types";
+import {
+  CUSTOMER_ID_PATTERN,
+  type AccessRequest,
+  type ChatAnswer,
+  type RetrievalMode,
+  type TraceEvent,
+} from "@/lib/types";
 import { AccessRequestCard } from "./AccessRequestCard";
 import { AnswerFeedback } from "./AnswerFeedback";
 import { AnswerCard } from "./AnswerCard";
@@ -31,6 +37,11 @@ const SUGGESTIONS: { text: string; customerId?: string }[] = [
   { text: "¿C-1007 cumple para el hipotecario?", customerId: "C-1007" },
 ];
 
+const MODE_LABELS: [RetrievalMode, string][] = [
+  ["hybrid", "RAG híbrido"],
+  ["agentic", "Agéntica"],
+];
+
 function describeFailure(err: unknown): string {
   if (err instanceof ApiError) {
     if (err.status === 409) return "No hay nada que reanudar: esta consulta ya no espera una decisión.";
@@ -48,11 +59,18 @@ export function Chat() {
   const [message, setMessage] = useState("");
   const [customerId, setCustomerId] = useState("");
   const [inspectorOpen, setInspectorOpen] = useState(false);
+  const [modes, setModes] = useState<RetrievalMode[]>(["hybrid"]);
+  const [mode, setMode] = useState<RetrievalMode>("hybrid");
   const log = useRef<HTMLDivElement>(null);
 
   const customerInvalid = customerId !== "" && !CUSTOMER_ID_PATTERN.test(customerId);
   const busy = turns.some((t) => t.streaming);
   const canSend = message.trim() !== "" && !customerInvalid && !busy;
+
+  useEffect(() => {
+    // An unreachable API surfaces on the first question; here it only keeps the agentic option hidden.
+    getRetrievalModes().then(setModes, () => {});
+  }, []);
 
   useEffect(() => {
     log.current?.scrollTo({ top: log.current.scrollHeight, behavior: "smooth" });
@@ -89,7 +107,10 @@ export function Chat() {
     setMessage("");
     run(
       { title: question, question, customerId: customer },
-      streamChat({ session_id: sessionId, message: question, customer_id: customer }, session?.token ?? null),
+      streamChat(
+        { session_id: sessionId, message: question, customer_id: customer, retrieval_mode: mode },
+        session?.token ?? null,
+      ),
     );
   }
 
@@ -134,6 +155,31 @@ export function Chat() {
                     ? "El rol Supervisor no consulta datos de clientes."
                     : "Sin persona solo se consultan documentos y productos."}
             </p>
+            {modes.includes("agentic") && (
+              <fieldset>
+                <legend className="block text-xs font-semibold text-muted">Búsqueda</legend>
+                <div className="mt-1 flex rounded-full bg-canvas p-0.5 ring-1 ring-line">
+                  {MODE_LABELS.map(([value, label]) => (
+                    <label
+                      key={value}
+                      className={`cursor-pointer rounded-full px-3 py-1 text-sm font-semibold transition-colors has-focus-visible:ring-2 has-focus-visible:ring-brand ${
+                        mode === value ? "bg-brand text-white" : "text-navy hover:bg-sky"
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="retrieval-mode"
+                        value={value}
+                        checked={mode === value}
+                        onChange={() => setMode(value)}
+                        className="sr-only"
+                      />
+                      {label}
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+            )}
             <button
               type="button"
               onClick={() => setInspectorOpen(!inspectorOpen)}

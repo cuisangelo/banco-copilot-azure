@@ -28,7 +28,9 @@ def tools_match(expected: list[str], traces: list[dict]) -> bool:
 
 
 def find_leaks(forbidden: list[str], answer: dict | None, traces: list[dict]) -> list[str]:
-    haystack = (json.dumps(answer, ensure_ascii=False) + json.dumps(traces, ensure_ascii=False)).lower()
+    # Only text carries a value: a trace's token and cost counters can contain any digits.
+    payloads = [{"node": trace["node"], "data": trace["data"]} for trace in traces]
+    haystack = (json.dumps(answer, ensure_ascii=False) + json.dumps(payloads, ensure_ascii=False)).lower()
     return [value for value in forbidden if value.lower() in haystack]
 
 

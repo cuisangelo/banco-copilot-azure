@@ -11,6 +11,7 @@ import type {
   Feedback,
   FeedbackCreate,
   PersonaKey,
+  RetrievalMode,
   TraceEvent,
 } from "./types";
 
@@ -68,6 +69,10 @@ async function postJson<T>(path: string, body: unknown, token: string | null): P
     body: JSON.stringify(body),
   });
   return response.json();
+}
+
+export async function getRetrievalModes(): Promise<RetrievalMode[]> {
+  return (await (await request("/status", {})).json()).retrieval_modes;
 }
 
 export function createDemoSession(persona: PersonaKey): Promise<DemoSession> {

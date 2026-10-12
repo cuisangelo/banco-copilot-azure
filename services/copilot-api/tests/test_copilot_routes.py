@@ -41,8 +41,10 @@ class Api:
         headers = {"Authorization": f"Bearer {self.token(persona)}"} if persona else {}
         return await self._http.request(method, path, headers=headers, **kwargs)
 
-    async def chat(self, message: str, persona: str | None = None, customer_id: str | None = None, session_id="s-1"):
-        body = {"session_id": session_id, "message": message, "customer_id": customer_id}
+    async def chat(
+        self, message: str, persona: str | None = None, customer_id: str | None = None, session_id="s-1", mode="hybrid"
+    ):
+        body = {"session_id": session_id, "message": message, "customer_id": customer_id, "retrieval_mode": mode}
         response = await self.request("POST", "/chat", persona, json=body)
         assert response.status_code == 200, response.text
         return parse_sse(response.text)
@@ -97,6 +99,43 @@ def traces(events) -> dict[str, dict]:
     return {data["node"]: data for name, data in events if name == "trace"}
 
 
+PROCEDURE_SCRIPT = {
+    RouteDecision: RouteDecision(route="procedure", search_query="antigüedad hipotecario"),
+    ComposerOutput: ComposerOutput(
+        message="Se exigen 12 meses.", requirements=[DraftClaim(text="12 meses", citation_ids=["S1"])], steps=[]
+    ),
+}
+
+
+async def test_status_lists_only_the_retrieval_modes_that_are_up(api):
+    assert (await api().request("GET", "/status")).json() == {"retrieval_modes": ["hybrid"]}
+    with_agentic = api(agentic=FakeRetriever([FICHA], mode="agentic"))
+    assert (await with_agentic.request("GET", "/status")).json() == {"retrieval_modes": ["hybrid", "agentic"]}
+
+
+async def test_agentic_question_searches_with_the_agentic_retriever_only(api):
+    hybrid = FakeRetriever([FICHA])
+    agentic = FakeRetriever([FICHA], mode="agentic", subqueries=["antigüedad laboral hipotecario", "renta hipotecario"])
+    app = api(chat_client=FakeChatClient(PROCEDURE_SCRIPT), retriever=hybrid, agentic=agentic)
+
+    events = await app.chat("¿antigüedad laboral para el hipotecario?", mode="agentic")
+
+    assert answer(events)["status"] == "ok"
+    assert (len(agentic.queries), len(hybrid.queries)) == (1, 0)
+    assert traces(events)["rag_agent"]["data"]["subqueries"] == ["antigüedad laboral hipotecario", "renta hipotecario"]
+
+
+async def test_agentic_question_while_agentic_is_down_is_refused_not_answered_hybrid(api):
+    hybrid = FakeRetriever([FICHA])
+    app = api(chat_client=FakeChatClient(PROCEDURE_SCRIPT), retriever=hybrid)
+
+    body = {"session_id": "s-1", "message": "¿antigüedad laboral?", "customer_id": None, "retrieval_mode": "agentic"}
+    response = await app.request("POST", "/chat", json=body)
+
+    assert response.status_code == 409
+    assert hybrid.queries == []
+
+
 async def test_trace_events_carry_cost_chunks_and_guardrails(api):
     client = FakeChatClient({
         RouteDecision: RouteDecision(route="procedure", search_query="antigüedad hipotecario"),
@@ -109,7 +148,7 @@ async def test_trace_events_carry_cost_chunks_and_guardrails(api):
     nodes = traces(await app.chat("¿antigüedad laboral para el hipotecario?"))
 
     assert nodes["router"]["cost_usd"] == pytest.approx(1000 * 0.40 / 1e6 + 200 * 1.60 / 1e6)
-    assert nodes["router"]["data"] == {"route": "procedure"}
+    assert nodes["router"]["data"] == {"route": "procedure", "topics": []}
     assert nodes["rag_agent"]["data"]["chunks"] == [
         {"id": FICHA.id, "doc_id": FICHA.doc_id, "section": FICHA.section, "score": FICHA.reranker_score, "content": FICHA.content}
     ]

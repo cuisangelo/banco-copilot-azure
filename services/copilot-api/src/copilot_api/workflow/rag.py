@@ -1,12 +1,11 @@
 import time
 from dataclasses import dataclass, field
-from typing import Literal
 
 from agent_framework import Executor, WorkflowContext, handler
 from agent_framework.openai import OpenAIEmbeddingClient
 from azure.search.documents.aio import SearchClient
 from azure.search.documents.models import VectorizedQuery
-from bank_contracts.models import ChatAnswer
+from bank_contracts.models import ChatAnswer, RetrievalMode
 from pydantic import BaseModel
 
 from copilot_api.workflow.escalation import ESCALATION_EXECUTOR_ID, EscalationCase
@@ -18,6 +17,7 @@ from copilot_api.workflow.turn import Services, Turn
 # product's claims ungrounded.
 TOP_K = 8
 BLOCKED_CONTENT = "[bloqueado por Prompt Shields]"
+UNCHECKED_CONTENT = "[bajo el umbral de relevancia: no se verificó ni llegó al modelo]"
 RERANKER_THRESHOLD = 1.5
 # Relative to the best chunk of the same search. Measured live: for "¿Cómo bloqueo una tarjeta
 # extraviada?" the relevant chunks scored 2.47–2.86 and the noise (Oro and Platinum benefits)
@@ -39,9 +39,6 @@ class Chunk(BaseModel):
     section: str
     content: str
     reranker_score: float
-
-
-RetrievalMode = Literal["hybrid", "agentic"]
 
 
 @dataclass
@@ -99,6 +96,7 @@ class Rag(Executor):
         started = time.perf_counter()
         retrieval = await self._services.retriever.search(turn.route.search_query, top=TOP_K)
         found = retrieval.chunks
+        turn.searched = found
         floor = max([self._threshold, *(chunk.reranker_score - RELEVANCE_MARGIN for chunk in found)])
         relevant = [chunk for chunk in found if chunk.reranker_score >= floor]
         attacks = (
@@ -125,8 +123,13 @@ class Rag(Executor):
                         "doc_id": chunk.doc_id,
                         "section": chunk.section,
                         "score": chunk.reranker_score,
-                        # Injected text never reaches the model, and it does not reach the inspector either.
-                        "content": BLOCKED_CONTENT if chunk.id in dropped else chunk.content,
+                        # The inspector shows only text Prompt Shields checked and passed: injected text
+                        # reaches neither the model nor the inspector.
+                        "content": BLOCKED_CONTENT
+                        if chunk.id in dropped
+                        else chunk.content
+                        if chunk in turn.chunks
+                        else UNCHECKED_CONTENT,
                     }
                     for chunk in found
                 ],

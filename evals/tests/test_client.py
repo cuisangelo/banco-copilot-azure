@@ -53,3 +53,19 @@ def test_runner_spaces_every_api_call_not_only_streams():
     assert paths[4].startswith("/sessions/") and paths[4].endswith("/resume")
     gaps = [later - earlier for (_, earlier), (_, later) in zip(started, started[1:])]
     assert all(gap >= MIN_SECONDS_BETWEEN_CALLS for gap in gaps), gaps
+
+
+def test_chat_asks_for_the_runner_retrieval_mode():
+    bodies = []
+
+    def handle(request):
+        bodies.append(json.loads(request.content))
+        return httpx.Response(200, text=sse("answer", {"status": "ok"}), headers={"content-type": "text/event-stream"})
+
+    clock = FakeClock()
+    http = httpx.Client(base_url="http://copilot", transport=httpx.MockTransport(handle))
+    client = CopilotClient(http, retrieval_mode="agentic", clock=clock.monotonic, sleep=clock.sleep)
+
+    client.chat(None, "s-1", "¿Diferencia entre Oro y Platinum?", None)
+
+    assert bodies[0]["retrieval_mode"] == "agentic"

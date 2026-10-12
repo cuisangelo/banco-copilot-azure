@@ -21,6 +21,7 @@ const JWKS_URL = `${process.env.NEXT_PUBLIC_API_BASE_URL}/.well-known/jwks.json`
 const SECTIONS = [
   { id: "arquitectura", label: "Arquitectura" },
   { id: "workflow", label: "Workflow" },
+  { id: "busqueda", label: "Búsqueda" },
   { id: "niveles", label: "Niveles de acceso" },
   { id: "recursos", label: "Recursos en Azure" },
   { id: "evidencia", label: "Evidencia pública" },
@@ -36,7 +37,7 @@ const WORKFLOW: { node: string; text: string; hitl?: boolean }[] = [
   },
   {
     node: "rag_agent",
-    text: "Búsqueda híbrida con reranking semántico en AI Search. Los fragmentos pasan por Prompt Shields antes de entrar al prompt.",
+    text: "Busca en AI Search en modo híbrido o agéntico, según elija el asesor. Los fragmentos pasan por Prompt Shields antes de entrar al prompt.",
   },
   { node: "product_agent", text: "Trae tasas, comisiones y comparaciones vigentes con las tools de mcp-bank." },
   {
@@ -55,6 +56,31 @@ const WORKFLOW: { node: string; text: string; hitl?: boolean }[] = [
     node: "escalation",
     text: "Si falta información o hay contradicción, propone un ticket redactado. Solo se crea si el asesor lo aprueba.",
     hitl: true,
+  },
+];
+
+const RETRIEVAL_MODES: { mode: string; name: string; points: string[] }[] = [
+  {
+    mode: "hybrid",
+    name: "RAG híbrido",
+    points: [
+      "Una sola búsqueda con la consulta que reescribe el router.",
+      "Combina palabras clave (BM25) y similitud de vectores (text-embedding-3-small); el reranking semántico ordena el resultado y quedan los 8 mejores fragmentos.",
+      "No llama al modelo de chat: solo cuesta un embedding.",
+      "Corre en AI Search Free y está siempre activo.",
+      "Una pregunta con varios temas sigue siendo una búsqueda: en una comparación, los fragmentos de un producto pueden desplazar a los del otro.",
+    ],
+  },
+  {
+    mode: "agentic",
+    name: "Agéntica",
+    points: [
+      "La knowledge base de AI Search usa gpt-4.1-mini para dividir la pregunta en subconsultas: una comparación se vuelve una búsqueda por producto.",
+      "Cada subconsulta corre con reranking semántico; se juntan las referencias y quedan las 8 de mayor puntaje.",
+      "La planificación gasta tokens del modelo de chat, que cuentan para el tope diario y el costo del inspector. El inspector muestra las subconsultas.",
+      "Necesita AI Search Basic (unos USD 0,10 por hora): en Free el planificador no puede llamar al modelo con identidad administrada, y no usamos llaves. Por eso vive en un servicio aparte, con una copia del índice, encendido solo para demos.",
+      "Usa la API preview 2026-08-01: la versión GA solo acepta subconsultas escritas por quien llama. Si una subconsulta falla, el turno da error en vez de responder con resultados parciales.",
+    ],
   },
 ];
 
@@ -273,6 +299,34 @@ export default function DocumentationPage() {
               </li>
             ))}
           </ol>
+        </Section>
+
+        <Section
+          id="busqueda"
+          title="Búsqueda: híbrida o agéntica"
+          lead="El asesor elige el modo en cada pregunta. La diferencia está en quién arma las consultas: en la híbrida es una sola, la del router; en la agéntica un modelo la divide en varias."
+        >
+          <div className="grid gap-4 md:grid-cols-2">
+            {RETRIEVAL_MODES.map((m) => (
+              <div key={m.mode} className="rounded-2xl bg-white p-5 shadow-soft ring-1 ring-line">
+                <h3 className="flex flex-wrap items-center gap-x-2 gap-y-1 font-display font-bold text-navy">
+                  {m.name}
+                  <Code>{m.mode}</Code>
+                </h3>
+                <ul className="mt-3 list-disc space-y-2 pl-5 leading-relaxed text-ink marker:text-brand">
+                  {m.points.map((point) => (
+                    <li key={point}>{point}</li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+          <p className="mt-6 max-w-3xl leading-relaxed text-ink">
+            Lo que sigue es igual en los dos modos: el filtro de relevancia, Prompt Shields sobre los fragmentos, el
+            composer y el verificador. Una consulta reanudada tras una aprobación no vuelve a buscar, porque recupera
+            los fragmentos del checkpoint. La opción agéntica solo aparece en el chat cuando <Code>GET /status</Code>{" "}
+            la informa activa; si no, <Code>/chat</Code> responde 409.
+          </p>
         </Section>
 
         <Section

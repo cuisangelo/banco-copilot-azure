@@ -29,9 +29,10 @@ MIN_SECONDS_BETWEEN_CALLS = 6.5
 
 
 class CopilotClient:
-    def __init__(self, http: httpx.Client, clock: Callable[[], float] = time.monotonic,
-                 sleep: Callable[[float], None] = time.sleep):
+    def __init__(self, http: httpx.Client, retrieval_mode: str = "hybrid",
+                 clock: Callable[[], float] = time.monotonic, sleep: Callable[[float], None] = time.sleep):
         self._http = http
+        self._retrieval_mode = retrieval_mode
         self._clock = clock
         self._sleep = sleep
         self._last_call = -MIN_SECONDS_BETWEEN_CALLS
@@ -43,7 +44,8 @@ class CopilotClient:
         return response.json()["token"]
 
     def chat(self, token: str | None, session_id: str, message: str, customer_id: str | None):
-        body = {"session_id": session_id, "message": message, "customer_id": customer_id}
+        body = {"session_id": session_id, "message": message, "customer_id": customer_id,
+                "retrieval_mode": self._retrieval_mode}
         return self._stream("/chat", token, body)
 
     def resume(self, token: str, session_id: str):

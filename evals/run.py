@@ -115,6 +115,7 @@ def judge_scores(graded_row: dict) -> dict:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--target", required=True)
+    parser.add_argument("--retrieval-mode", choices=("hybrid", "agentic"), default="hybrid")
     args = parser.parse_args()
 
     project_endpoint = require_env("FOUNDRY_PROJECT_ENDPOINT")
@@ -129,7 +130,7 @@ def main() -> int:
         "groundedness": GroundednessEvaluator(model_config, credential=credential),
         "retrieval": RetrievalEvaluator(model_config, credential=credential),
     }
-    client = CopilotClient(httpx.Client(base_url=args.target, timeout=120))
+    client = CopilotClient(httpx.Client(base_url=args.target, timeout=120), retrieval_mode=args.retrieval_mode)
     rows = [json.loads(line) for line in (EVALS_DIR / "dataset.jsonl").read_text(encoding="utf-8").splitlines()]
 
     results, inputs, records, details = [], [], [], []

@@ -20,6 +20,8 @@ OUT_OF_SCOPE_MESSAGE = (
 class RouteDecision(BaseModel):
     route: Route
     search_query: str
+    # Checkpoints written before this field existed still load.
+    topics: list[str] = []
     customer_id: str | None = None
     clarification_question: str | None = None
 
@@ -50,7 +52,7 @@ class Router(Executor):
             system=self._system,
             user=f"{customer}Historial:\n{render_history(turn)}\n\nConsulta actual:\n{turn.message}",
         )
-        data = {"route": decision.route}
+        data = {"route": decision.route, "topics": decision.topics}
         if decision.route == "out_of_scope":
             data["guardrail"] = "router_out_of_scope"
         await emit_trace(ctx, "router", started, data, usage)

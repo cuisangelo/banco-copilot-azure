@@ -8,6 +8,7 @@ Level2Field = Literal["monthly_income", "current_debt", "payment_behavior", "emp
 LEVEL2_FIELDS: tuple[Level2Field, ...] = ("monthly_income", "current_debt", "payment_behavior", "employment_tenure_months")
 ChatStatus = Literal["ok", "clarification", "insufficient", "contradiction", "rejected", "access_required"]
 AccessRequestStatus = Literal["pending", "approved", "partially_approved", "rejected", "expired"]
+RetrievalMode = Literal["hybrid", "agentic"]
 CUSTOMER_ID_PATTERN = r"^C-\d{4}$"
 GRANT_MINUTES = 30
 
@@ -103,6 +104,7 @@ class ChatRequest(BaseModel):
     session_id: str
     message: str = Field(min_length=1, max_length=2000)
     customer_id: str | None = Field(default=None, pattern=CUSTOMER_ID_PATTERN)
+    retrieval_mode: RetrievalMode = "hybrid"
 
 
 class ChatAnswer(BaseModel):

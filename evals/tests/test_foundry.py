@@ -33,7 +33,7 @@ TRACES = {
 
 
 class FakeClient:
-    def __init__(self, http):
+    def __init__(self, http, retrieval_mode):
         pass
 
     def token(self, persona):

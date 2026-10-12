@@ -43,13 +43,13 @@ describe("streamChat", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     const events = await collect(
-      streamChat({ session_id: "s1", message: "hola", customer_id: null }, "tok-ana"),
+      streamChat({ session_id: "s1", message: "hola", customer_id: null, retrieval_mode: "hybrid" }, "tok-ana"),
     );
 
     expect(fetchMock).toHaveBeenCalledWith("http://api.test/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: "Bearer tok-ana" },
-      body: JSON.stringify({ session_id: "s1", message: "hola", customer_id: null }),
+      body: JSON.stringify({ session_id: "s1", message: "hola", customer_id: null, retrieval_mode: "hybrid" }),
     });
     expect(events.map((e) => e.type)).toEqual(["trace", "answer"]);
     expect(events[1]).toEqual({ type: "answer", payload: answer });
@@ -59,7 +59,7 @@ describe("streamChat", () => {
     const fetchMock = vi.fn().mockResolvedValue(sseResponse(`event: answer\ndata: ${JSON.stringify(answer)}\n\n`));
     vi.stubGlobal("fetch", fetchMock);
 
-    await collect(streamChat({ session_id: "s1", message: "hola", customer_id: null }, null));
+    await collect(streamChat({ session_id: "s1", message: "hola", customer_id: null, retrieval_mode: "hybrid" }, null));
 
     expect(fetchMock.mock.calls[0][1].headers).toEqual({ "Content-Type": "application/json" });
   });
@@ -67,7 +67,7 @@ describe("streamChat", () => {
   it("throws ApiError with the HTTP status when the request is rejected", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("{}", { status: 401 })));
 
-    await expect(collect(streamChat({ session_id: "s1", message: "x", customer_id: null }, "old"))).rejects.toEqual(
+    await expect(collect(streamChat({ session_id: "s1", message: "x", customer_id: null, retrieval_mode: "hybrid" }, "old"))).rejects.toEqual(
       new ApiError(401),
     );
   });
@@ -75,7 +75,7 @@ describe("streamChat", () => {
   it("fails loudly on an event name outside the contract", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(sseResponse("event: surprise\ndata: {}\n\n")));
 
-    await expect(collect(streamChat({ session_id: "s1", message: "x", customer_id: null }, null))).rejects.toThrow(
+    await expect(collect(streamChat({ session_id: "s1", message: "x", customer_id: null, retrieval_mode: "hybrid" }, null))).rejects.toThrow(
       "surprise",
     );
   });
