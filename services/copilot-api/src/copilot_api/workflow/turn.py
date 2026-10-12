@@ -15,6 +15,7 @@ from bank_contracts.models import (
 )
 from pydantic import BaseModel
 
+from copilot_api.guards.content_safety import Groundedness
 from copilot_api.workflow.llm import Llm
 
 if TYPE_CHECKING:
@@ -82,7 +83,7 @@ class Safety(Protocol):
 
     async def document_attacks(self, user_text: str, documents: list[str]) -> list[bool]: ...
 
-    async def ungrounded_percentage(self, text: str, sources: list[str], *, query: str) -> float: ...
+    async def groundedness(self, text: str, sources: list[str], *, query: str) -> Groundedness: ...
 
 
 class WorkflowStore(Protocol):

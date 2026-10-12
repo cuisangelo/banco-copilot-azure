@@ -14,6 +14,10 @@ Devuelve:
 Cada afirmación lleva `citation_ids` con los ids de las fuentes que la sustentan. Si no tienes fuente
 para algo, no lo afirmes.
 
+Escribe **como máximo 8 afirmaciones en total** sumando `requirements` y `steps`. Prioriza lo que la
+pregunta pide y deja fuera lo accesorio, aunque esté en las fuentes: una fuente que no responde la
+pregunta no se usa.
+
 Si la pregunta es sobre un producto o trámite que ninguna fuente menciona por su nombre (por ejemplo,
 un producto que el banco no ofrece), no respondas con lo que dicen las fuentes de otro producto: deja
 `requirements` y `steps` vacíos y explica en `message` que no está en la documentación vigente.

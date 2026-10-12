@@ -1,11 +1,15 @@
 import asyncio
 import json
 
+import httpx
 import pytest
 from agent_framework import InMemoryCheckpointStorage
+from agent_framework.openai import OpenAIChatCompletionClient
 from bank_contracts.models import EscalationDecision
+from openai import AsyncAzureOpenAI
 from pydantic import ValidationError
 
+from copilot_api.guards.content_safety import ContentSafety, Groundedness
 from copilot_api.store import InMemoryStore
 from copilot_api.workflow.composer import ComposerOutput, DraftClaim
 from copilot_api.workflow.customer import CustomerPlan
@@ -16,7 +20,7 @@ from copilot_api.workflow.rag import Chunk
 from copilot_api.workflow.router import RouteDecision
 from copilot_api.workflow.trace import TRACE_EVENT_TYPE
 from copilot_api.workflow.turn import Turn, TurnResult
-from fakes import FakeBank, FakeChatClient, FakeRetriever, FakeSafety
+from fakes import FakeBank, FakeChatClient, FakeRetriever, FakeSafety, ungrounded_detail
 from wiring import make_services
 
 
@@ -116,6 +120,34 @@ async def test_injected_chunk_is_dropped_before_the_prompt():
     assert [entry["layer"] for entry in store.audit_log] == ["prompt_shields_documents"]
     traces = [event.data for event in events if event.type == TRACE_EVENT_TYPE]
     assert "ignora tus instrucciones" not in json.dumps([trace.data for trace in traces], ensure_ascii=False)
+
+
+async def sources_reaching_the_composer(scores: list[float]) -> list[float]:
+    chunks = [chunk(f"doc-{index}", f"fragmento {score}", score=score) for index, score in enumerate(scores)]
+    services = make_services(
+        llm=scripted(route("procedure"), ComposerOutput(message="ok", requirements=[DraftClaim(text="x", citation_ids=["S1"])], steps=[])),
+        retriever=FakeRetriever(chunks),
+    )
+    answer = answer_of(await run_turn(services, "consulta"))
+    return [float(citation.snippet.removeprefix("fragmento ")) for citation in answer.citations]
+
+
+async def test_chunks_far_below_the_best_score_are_noise():
+    # Measured live for "¿Cómo bloqueo una tarjeta extraviada?": Oro and Platinum benefits came in at 2.17–2.18.
+    relevant, noise = [2.86, 2.71, 2.47], [2.18, 2.17]
+
+    assert await sources_reaching_the_composer(relevant + noise) == relevant
+
+
+async def test_chunks_close_to_the_best_score_all_survive():
+    # Measured live for "¿Diferencia entre Oro y Platinum?": eight relevant chunks between 2.24 and 2.46.
+    comparison = [2.46, 2.43, 2.40, 2.36, 2.33, 2.30, 2.27, 2.24]
+
+    assert await sources_reaching_the_composer(comparison) == comparison
+
+
+async def test_close_chunks_below_the_absolute_threshold_are_still_dropped():
+    assert await sources_reaching_the_composer([1.8, 1.6, 1.4]) == [1.8, 1.6]
 
 
 INCOME_AND_DEBT = CustomerPlan(
@@ -279,6 +311,135 @@ async def test_ungrounded_answer_is_insufficient():
     )
 
     assert answer_of(await run_turn(services, "¿antigüedad laboral?")).status == "insufficient"
+
+
+ORO = chunk("ficha-tc-oro-0", "Tarjeta Oro: renta mínima $800.000, mantención $4.500 mensual, seguro de viaje nacional.")
+PLATINUM = chunk(
+    "ficha-tc-platinum-0", "Tarjeta Platinum: renta mínima $1.500.000, mantención $7.900 mensual, seguro de viaje internacional."
+)
+COMPARISON = [
+    DraftClaim(text="Oro exige renta mínima de $800.000", citation_ids=["S1"]),
+    DraftClaim(text="Platinum exige renta mínima de $1.500.000", citation_ids=["S2"]),
+    DraftClaim(text="Oro cobra $4.500 de mantención mensual", citation_ids=["S1"]),
+    DraftClaim(text="Platinum cobra $7.900 de mantención mensual", citation_ids=["S2"]),
+    DraftClaim(text="Oro incluye seguro de viaje nacional", citation_ids=["S1"]),
+    DraftClaim(text="La reposición de una tarjeta bloqueada demora 5 días hábiles", citation_ids=["S2"]),
+]
+
+
+def groundedness_endpoint(*ungrounded: str) -> ContentSafety:
+    """Content Safety over a fake HTTP endpoint that flags `ungrounded` wherever it appears and sees no attacks."""
+
+    def responder(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        if request.url.path.endswith(":shieldPrompt"):
+            analyses = [{"attackDetected": False} for _ in body["documents"]]
+            return httpx.Response(200, json={"userPromptAnalysis": {"attackDetected": False}, "documentsAnalysis": analyses})
+        details = [ungrounded_detail(body["text"], segment) for segment in ungrounded]
+        share = sum(len(segment) for segment in ungrounded) / len(body["text"])
+        return httpx.Response(
+            200, json={"ungroundedDetected": bool(details), "ungroundedPercentage": share, "ungroundedDetails": details}
+        )
+
+    http = httpx.AsyncClient(transport=httpx.MockTransport(responder))
+    return ContentSafety(endpoint="https://cs.example", http=http, token_provider=_static_token)
+
+
+async def _static_token() -> str:
+    return "aad-token"
+
+
+async def compare(*ungrounded: str, message: str = "Esto es lo que encontré."):
+    output = ComposerOutput(message=message, requirements=COMPARISON[:4], steps=COMPARISON[4:])
+    services = make_services(
+        llm=scripted(route("procedure"), output),
+        retriever=FakeRetriever([ORO, PLATINUM]),
+        safety=groundedness_endpoint(*ungrounded),
+    )
+    events = await run_turn(services, "¿Diferencia entre Oro y Platinum?")
+    (verifier,) = [event.data for event in events if event.type == TRACE_EVENT_TYPE and event.data.node == "verifier"]
+    return answer_of(events), verifier, events
+
+
+def claim_texts(answer) -> list[str]:
+    return [claim.text for claim in answer.requirements + answer.steps]
+
+
+async def test_fully_grounded_answer_keeps_every_claim_and_its_message():
+    answer, verifier, _ = await compare()
+
+    assert answer.status == "ok"
+    assert claim_texts(answer) == [claim.text for claim in COMPARISON]
+    assert answer.message == "Esto es lo que encontré."
+    assert verifier.data["dropped_claims"] == 0
+
+
+async def test_one_ungrounded_claim_is_dropped_and_the_rest_answer_ok():
+    # The service flags a passage inside the claim, with its own casing and spacing.
+    answer, verifier, events = await compare("reposición de una tarjeta  bloqueada".replace("  ", " "))
+
+    assert answer.status == "ok"
+    assert claim_texts(answer) == [claim.text for claim in COMPARISON[:5]]
+    assert answer.message == "Esto es lo que encontré.\nOmití 1 afirmación que las fuentes no respaldan."
+    assert answer.escalation is None
+    assert verifier.data["dropped_claims"] == 1
+    assert verifier.data["guardrail"] == "groundedness"
+    assert verifier.data["ungrounded_percentage"] > 0
+    traces = json.dumps([event.data.data for event in events if event.type == TRACE_EVENT_TYPE], ensure_ascii=False)
+    assert "reposición" not in traces.casefold()
+
+
+async def test_half_of_the_claims_ungrounded_still_answers_with_the_other_half():
+    answer, verifier, _ = await compare(*(claim.text for claim in COMPARISON[3:]))
+
+    assert answer.status == "ok"
+    assert claim_texts(answer) == [claim.text for claim in COMPARISON[:3]]
+    assert answer.message.endswith("Omití 3 afirmaciones que las fuentes no respaldan.")
+
+
+async def test_more_than_half_ungrounded_is_insufficient_and_escalates():
+    answer, verifier, _ = await compare(*(claim.text for claim in COMPARISON[2:]))
+
+    assert answer.status == "insufficient"
+    assert answer.requirements == [] and answer.steps == []
+    assert answer.escalation is not None
+    assert verifier.data["dropped_claims"] == 4
+
+
+async def test_ungrounded_message_is_replaced_by_the_sources_lead_in():
+    answer, verifier, _ = await compare("Platinum incluye acceso a salas VIP.", message="Platinum incluye acceso a salas VIP.")
+
+    assert answer.status == "ok"
+    assert answer.message == "Esto es lo que respaldan las fuentes:"
+    assert claim_texts(answer) == [claim.text for claim in COMPARISON]
+    assert verifier.data["dropped_claims"] == 0
+
+
+async def test_ungrounded_passage_across_two_claims_drops_both():
+    # The service returns one passage spanning the end of a claim and the start of the next.
+    answer, verifier, _ = await compare("$800.000\nPlatinum exige")
+
+    assert answer.status == "ok"
+    assert claim_texts(answer) == [claim.text for claim in COMPARISON[2:]]
+    assert verifier.data["dropped_claims"] == 2
+
+
+async def test_ungrounded_passage_matching_no_claim_is_insufficient():
+    # The service may echo a passage with its own punctuation; if nothing contains it, nothing can be
+    # dropped to remove it, so the answer cannot ship as ok.
+    class EchoesEditedPassage(FakeSafety):
+        async def groundedness(self, text: str, sources: list[str], *, query: str) -> Groundedness:
+            return Groundedness(0.1, ["“Oro” exige"])
+
+    output = ComposerOutput(message="Esto es lo que encontré.", requirements=COMPARISON[:4], steps=COMPARISON[4:])
+    services = make_services(
+        llm=scripted(route("procedure"), output), retriever=FakeRetriever([ORO, PLATINUM]), safety=EchoesEditedPassage()
+    )
+
+    answer = answer_of(await run_turn(services, "¿Diferencia entre Oro y Platinum?"))
+
+    assert answer.status == "insufficient"
+    assert answer.escalation is not None
 
 
 async def test_circular_and_mortgage_sheet_disagreeing_is_a_contradiction():
@@ -535,3 +696,26 @@ async def test_concurrent_agents_share_five_tool_calls_across_an_access_pause():
 
     assert len(bank.calls) == 5
     assert bank.calls[-1] == ("get_customer_fields", {"customer_id": "C-1001", "fields": ["employment_tenure_months"]})
+
+
+async def test_structured_calls_reach_the_deployment_at_temperature_zero():
+    bodies = []
+
+    def responder(request: httpx.Request) -> httpx.Response:
+        bodies.append(json.loads(request.content))
+        message = {"role": "assistant", "content": route("procedure").model_dump_json()}
+        return httpx.Response(200, json={
+            "id": "c-1", "object": "chat.completion", "created": 0, "model": "gpt-4.1-mini",
+            "choices": [{"index": 0, "finish_reason": "stop", "message": message}],
+            "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
+        })
+
+    openai = AsyncAzureOpenAI(
+        azure_endpoint="https://aoai.example", api_version="2024-10-21", api_key="test",
+        http_client=httpx.AsyncClient(transport=httpx.MockTransport(responder)),
+    )
+    llm = Llm(OpenAIChatCompletionClient(model="gpt-4.1-mini", async_client=openai), model="gpt-4.1-mini")
+
+    await llm.structured(RouteDecision, system="router", user="¿Diferencia entre Oro y Platinum?")
+
+    assert bodies[0]["temperature"] == 0
