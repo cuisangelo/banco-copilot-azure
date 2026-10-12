@@ -52,7 +52,7 @@ resource "azapi_resource" "chat_deployment" {
   parent_id = azapi_resource.foundry.id
 
   body = {
-    sku = { name = "GlobalStandard", capacity = 50 }
+    sku = { name = "GlobalStandard", capacity = 200 }
     properties = {
       model = { format = "OpenAI", name = "gpt-4.1-mini", version = "2025-04-14" }
     }
