@@ -36,8 +36,14 @@ variable "budget_alert_emails" {
 
 variable "github_repository" {
   type        = string
-  description = "owner/repo allowed to deploy via OIDC. Null until the remote exists; the deploy identity is created regardless."
+  description = "Repository allowed to deploy via OIDC, as GitHub writes it in the token subject: owner@<owner id>/repo@<repo id> (ids from `gh api repos/<owner>/<repo> --jq '.owner.id, .id'`). Null until the remote exists; the deploy identity is created regardless."
   default     = null
+
+  validation {
+    # GitHub issues subjects with immutable ids; the plain owner/repo form never matches (AADSTS700213).
+    condition     = var.github_repository == null || can(regex("^[^@/]+@[0-9]+/[^@/]+@[0-9]+$", var.github_repository))
+    error_message = "github_repository must look like owner@<owner id>/repo@<repo id>, the form GitHub puts in the OIDC subject."
+  }
 }
 
 variable "cosmos_location" {
