@@ -7,7 +7,7 @@ KEYS = ["id", "type", "persona", "customer_id", "question", "expected_status", "
         "expected_citations", "expected_tools", "grant_fields", "forbidden_values"]
 TYPES = {"respondible", "producto", "mixta", "cliente_nivel1", "cliente_nivel2_con_permiso",
          "cliente_nivel2_sin_permiso", "sin_respuesta", "contradictoria", "fuera_de_alcance",
-         "injection_directa", "injection_indirecta", "escalada_por_injection"}
+         "injection_directa", "injection_indirecta", "escalada_por_injection", "ambigua"}
 STATUSES = {"ok", "clarification", "insufficient", "contradiction", "rejected", "access_required"}
 TOOLS = {"get_product", "list_products", "compare_products", "get_customer_profile", "get_customer_fields"}
 LEVEL1 = {"segment", "income_type", "products", "customer_tenure_months"}
