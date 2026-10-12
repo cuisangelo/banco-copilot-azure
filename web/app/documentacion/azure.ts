@@ -1,6 +1,6 @@
 // What the page says about each deployed resource, keyed by a stable logical key. Names, subscription and
-// tenant come from inventory.generated.json (scripts/web_inventory.sh), which is gitignored: the repo is
-// public and carries no identifier of the real deployment.
+// tenant come from public/privado/inventario.json (scripts/web_inventory.sh), which is gitignored and served
+// to the owner only: the repo and the public page carry no identifier of the real deployment.
 
 export type Region = "canadaeast" | "eastus2";
 
@@ -153,10 +153,26 @@ export function resolveDeployment(inventory: Inventory): Deployment {
   };
 }
 
+/** What anyone may see: services, types and regions, without a name or id that points at the deployment. */
+export type PublicResource = Omit<AzureResource, "name">;
+export type Layout = { resources: PublicResource[] };
+
+export function toLayout(deployment: Deployment): Layout {
+  return {
+    resources: deployment.resources.map(({ key, type, location, regionLabel }) => ({
+      key,
+      type,
+      location,
+      regionLabel,
+      ...CATALOG[key],
+    })),
+  };
+}
+
 export const portalUrl = (deployment: Deployment, resource: Pick<AzureResource, "type" | "name">) =>
   `${deployment.resourceGroupUrl}/providers/${resource.type}/${resource.name}/overview`;
 
-export function resourceByKey(deployment: Deployment, key: ResourceKey): AzureResource {
+export function resourceByKey<R extends { key: ResourceKey }>(source: { resources: R[] }, key: ResourceKey): R {
   // resolveDeployment guarantees exactly one resource per key.
-  return deployment.resources.find((r) => r.key === key)!;
+  return source.resources.find((r) => r.key === key)!;
 }

@@ -1,4 +1,4 @@
-// Turns `az account show` + `az resource list` into app/documentacion/inventory.generated.json.
+// Turns `az account show` + `az resource list` into public/privado/inventario.json.
 // Called by scripts/web_inventory.sh: node inventory-from-az.mjs <resource-group> <account.json> <resources.json>
 import { readFileSync } from "node:fs";
 

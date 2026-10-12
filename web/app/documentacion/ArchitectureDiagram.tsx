@@ -1,7 +1,11 @@
-import { portalUrl, resourceByKey, type AzureResource, type Deployment, type ResourceKey } from "./azure";
+"use client";
+
+import { portalUrl, resourceByKey, type Deployment, type Layout, type PublicResource, type ResourceKey } from "./azure";
+import { usePortal } from "./portal";
 
 // Laid out in the style of the Azure Architecture Center: nested dashed boundaries, official icons with
-// the product name underneath, numbered steps on the request path. Every resource is a link to the portal.
+// the product name underneath, numbered steps on the request path. For the signed-in owner every resource
+// is a link to the portal and shows its name; everyone else sees the same map without either.
 
 const ICON = 48;
 const INK = "#14213d";
@@ -32,14 +36,14 @@ const NODES: { key: ResourceKey; x: number; y: number; note?: string }[] = [
 ];
 
 // The layout draws two region boxes; a deployment that spreads differently would be drawn wrong.
-function regionLabels(deployment: Deployment): { left: string; right: string } {
-  const left = resourceByKey(deployment, "web").location;
-  const right = resourceByKey(deployment, "copilot-api").location;
-  for (const r of deployment.resources) {
+function regionLabels(layout: Layout): { left: string; right: string } {
+  const left = resourceByKey(layout, "web").location;
+  const right = resourceByKey(layout, "copilot-api").location;
+  for (const r of layout.resources) {
     const expected = LEFT_REGION.includes(r.key) ? left : right;
     if (r.location !== expected) throw new Error(`diagram: ${r.key} is in ${r.location}, the layout expects ${expected}`);
   }
-  return { left: resourceByKey(deployment, "web").regionLabel, right: resourceByKey(deployment, "copilot-api").regionLabel };
+  return { left: resourceByKey(layout, "web").regionLabel, right: resourceByKey(layout, "copilot-api").regionLabel };
 }
 
 function Icon({ x, y, icon, size = ICON }: { x: number; y: number; icon: string; size?: number }) {
@@ -64,7 +68,8 @@ function NodeLabel({ x, y, title, sub, note }: { x: number; y: number; title: st
   );
 }
 
-function PortalLink({ href, label, children }: { href: string; label: string; children: React.ReactNode }) {
+function PortalLink({ href, label, children }: { href: string | null; label: string; children: React.ReactNode }) {
+  if (href === null) return <g>{children}</g>;
   return (
     <a href={href} target="_blank" rel="noopener noreferrer" aria-label={label} className="group">
       {children}
@@ -92,17 +97,18 @@ function ResourceNode({
   y,
   note,
 }: {
-  deployment: Deployment;
-  r: AzureResource;
+  deployment: Deployment | null;
+  r: PublicResource;
   x: number;
   y: number;
   note?: string;
 }) {
+  const named = deployment && resourceByKey(deployment, r.key);
   return (
-    <PortalLink href={portalUrl(deployment, r)} label={`Abrir ${r.name} en el portal de Azure`}>
+    <PortalLink href={deployment && named ? portalUrl(deployment, named) : null} label={`Abrir ${named?.name} en el portal de Azure`}>
       <Highlight x={x - 75} y={y - 32} w={150} h={note ? 112 : 98} />
       <Icon x={x} y={y} icon={r.icon} />
-      <NodeLabel x={x} y={y} title={r.service} sub={r.name} note={note} />
+      <NodeLabel x={x} y={y} title={r.service} sub={named?.name ?? r.key} note={note} />
     </PortalLink>
   );
 }
@@ -167,11 +173,13 @@ function Step({ x, y, label, ingest = false }: { x: number; y: number; label: st
   );
 }
 
-export function ArchitectureDiagram({ deployment }: { deployment: Deployment }) {
-  const env = resourceByKey(deployment, "container-apps-env");
-  const regions = regionLabels(deployment);
-  const group = deployment.resourceGroup;
-  const groupUrl = `${deployment.resourceGroupUrl}/overview`;
+export function ArchitectureDiagram({ layout }: { layout: Layout }) {
+  const deployment = usePortal();
+  const env = resourceByKey(layout, "container-apps-env");
+  const namedEnv = deployment && resourceByKey(deployment, "container-apps-env");
+  const regions = regionLabels(layout);
+  const group = deployment?.resourceGroup ?? "";
+  const groupUrl = deployment && `${deployment.resourceGroupUrl}/overview`;
   return (
     <svg
       viewBox="0 0 1280 1050"
@@ -219,14 +227,14 @@ export function ArchitectureDiagram({ deployment }: { deployment: Deployment }) 
       </text>
 
       <Boundary x={445} y={255} w={760} h={225} stroke="#5b3cc4" />
-      <PortalLink href={portalUrl(deployment, env)} label={`Abrir ${env.name} en el portal de Azure`}>
+      <PortalLink href={deployment && namedEnv ? portalUrl(deployment, namedEnv) : null} label={`Abrir ${namedEnv?.name} en el portal de Azure`}>
         <Highlight x={453} y={259} w={236} h={40} />
         <Icon x={472} y={279} icon={env.icon} size={26} />
         <text x={492} y={276} fontSize={12.5} fontWeight={700} fill={INK}>
           {env.service}
         </text>
         <text x={492} y={291} fontSize={11} fill={MUTED}>
-          {env.name}
+          {namedEnv?.name}
         </text>
       </PortalLink>
 
@@ -299,7 +307,7 @@ export function ArchitectureDiagram({ deployment }: { deployment: Deployment }) 
       </EdgeLabel>
 
       {NODES.map(({ key, ...position }) => (
-        <ResourceNode key={key} deployment={deployment} r={resourceByKey(deployment, key)} {...position} />
+        <ResourceNode key={key} deployment={deployment} r={resourceByKey(layout, key)} {...position} />
       ))}
 
       {/* The six user-assigned identities have no single portal page; the node opens the resource group. */}

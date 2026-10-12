@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LockIcon } from "./icons";
 import { PersonaPicker } from "./PersonaPicker";
 
 // Southern Cross: four stars, the brand mark of a bank called "Austral".
@@ -26,8 +25,7 @@ function Wordmark() {
 const LINKS = [
   { href: "/", label: "Atención" },
   { href: "/supervisor", label: "Aprobaciones" },
-  // Behind Static Web Apps auth: a full page load lets SWA redirect to login, which a client-side RSC fetch cannot follow.
-  { href: "/documentacion", label: "Documentación", authProtected: true },
+  { href: "/documentacion", label: "Documentación" },
 ];
 
 export function TopBar() {
@@ -47,11 +45,10 @@ export function TopBar() {
           aria-label="Secciones"
           className="order-3 -mx-4 flex w-[calc(100%+2rem)] border-t border-white/10 sm:order-2 sm:mx-0 sm:ml-6 sm:w-auto sm:border-0"
         >
-          {LINKS.map(({ href, label, authProtected }) => {
+          {LINKS.map(({ href, label }) => {
             const active = pathname === href || pathname === `${href}/`;
-            const Anchor = authProtected ? "a" : Link;
             return (
-              <Anchor
+              <Link
                 key={href}
                 href={href}
                 aria-current={active ? "page" : undefined}
@@ -59,10 +56,9 @@ export function TopBar() {
                   active ? "text-white" : "text-white/70 hover:text-white"
                 }`}
               >
-                {authProtected && <LockIcon className="size-3.5" />}
                 {label}
                 {active && <span className="absolute inset-x-3 bottom-0 h-[3px] rounded-full bg-cyan" />}
-              </Anchor>
+              </Link>
             );
           })}
         </nav>
