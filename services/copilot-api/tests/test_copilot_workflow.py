@@ -9,7 +9,7 @@ from bank_contracts.models import EscalationDecision
 from openai import AsyncAzureOpenAI
 from pydantic import ValidationError
 
-from copilot_api.guards.content_safety import ContentSafety
+from copilot_api.guards.content_safety import ContentSafety, Groundedness
 from copilot_api.store import InMemoryStore
 from copilot_api.workflow.composer import ComposerOutput, DraftClaim
 from copilot_api.workflow.customer import CustomerPlan
@@ -415,9 +415,28 @@ async def test_ungrounded_message_is_replaced_by_the_sources_lead_in():
     assert verifier.data["dropped_claims"] == 0
 
 
-async def test_ungrounded_passage_no_claim_contains_is_insufficient():
-    # Straddles two claims without containing either: it cannot be dropped claim by claim.
-    answer, _, _ = await compare("$800.000\nPlatinum exige")
+async def test_ungrounded_passage_across_two_claims_drops_both():
+    # The service returns one passage spanning the end of a claim and the start of the next.
+    answer, verifier, _ = await compare("$800.000\nPlatinum exige")
+
+    assert answer.status == "ok"
+    assert claim_texts(answer) == [claim.text for claim in COMPARISON[2:]]
+    assert verifier.data["dropped_claims"] == 2
+
+
+async def test_ungrounded_passage_matching_no_claim_is_insufficient():
+    # The service may echo a passage with its own punctuation; if nothing contains it, nothing can be
+    # dropped to remove it, so the answer cannot ship as ok.
+    class EchoesEditedPassage(FakeSafety):
+        async def groundedness(self, text: str, sources: list[str], *, query: str) -> Groundedness:
+            return Groundedness(0.1, ["“Oro” exige"])
+
+    output = ComposerOutput(message="Esto es lo que encontré.", requirements=COMPARISON[:4], steps=COMPARISON[4:])
+    services = make_services(
+        llm=scripted(route("procedure"), output), retriever=FakeRetriever([ORO, PLATINUM]), safety=EchoesEditedPassage()
+    )
+
+    answer = answer_of(await run_turn(services, "¿Diferencia entre Oro y Platinum?"))
 
     assert answer.status == "insufficient"
     assert answer.escalation is not None

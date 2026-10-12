@@ -97,9 +97,13 @@ class Verifier(Executor):
         groundedness = await self._services.safety.groundedness(
             "\n".join(parts), [citation.snippet for citation in turn.citations], query=turn.message
         )
-        segments = [segment for segment in map(_normalize, groundedness.segments) if segment]
+        # The checked text joins message and claims with newlines, so a flagged passage can span two of
+        # them; split it on those boundaries first, or it matches neither and the whole answer is lost.
+        segments = [
+            piece for segment in groundedness.segments for piece in map(_normalize, segment.splitlines()) if piece
+        ]
         dropped = [claim for claim in claims if _overlaps(claim.text, segments)]
-        # A flagged passage that is neither the message nor inside a claim cannot be removed claim by claim.
+        # A flagged piece that is neither the message nor inside a claim cannot be removed claim by claim.
         unattributed = any(not any(_overlaps(part, [segment]) for part in parts) for segment in segments)
         kept_requirements = [claim for claim in composed.requirements if claim not in dropped]
         kept_steps = [claim for claim in composed.steps if claim not in dropped]
