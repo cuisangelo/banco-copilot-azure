@@ -107,6 +107,25 @@ herramientas. Cuando una hora es aproximada se marca con `~`.
 | ~23:55 | **Decisión del usuario:** repo **público**, con el inventario de `/documentacion` fuera del código. Auditoría: el ID de suscripción, el dominio del tenant y los nombres solo aparecen en `web/app/documentacion/*` desde `800bed5`. El escaneo de secretos del historial completo sale limpio (sin llaves, tokens, SAS ni correos). El historial se limpia al final, cuando terminen las sesiones. |
 | ~00:00 | El usuario pide usar "luna 6". El catálogo de Canada East tiene `gpt-6-luna` (2026-09-22, GA, chat y Responses), pero la **cuota de la Free Trial es 0 en todas las regiones** (también para `gpt-5.6-luna`). No hay precio publicado para `gpt-6-luna`. **Decisión del usuario:** seguir con gpt-4.1-mini. |
 
+| ~00:10 | Integradas las tres sesiones. **Feedback humano:** 👍/👎 por respuesta, guardado como evento en `audit`, con una pestaña en `/supervisor`. Un `session_id` con `/` daba 500 y ahora da 422 (`f0a6509`). **Evaluaciones a Foundry y notebook** (`evals/notebooks/reporte.ipynb`). **Calidad:** respuesta sin afirmaciones → `insufficient`; perfil con nombres de producto; patrón **concurrente** con fan-out/fan-in de productos y cliente; `RETRIEVAL_MODE` requerido. 254 tests. |
+| ~00:15 | **Agentic retrieval queda bloqueado:** en AI Search Free el planificador no puede llamar al modelo con identidad administrada (Microsoft exige Basic o superior), y las llaves están prohibidas por diseño. El código queda detrás de `RETRIEVAL_MODE=agentic`; se despliega con `hybrid`. |
+| ~00:20 | Despliegue de `copilot-api` (revisión `--0000014`) con `RETRIEVAL_MODE=hybrid` en el mismo update; si no, la app no arranca. Web con feedback publicada. Smoke en vivo: 8 citas y `access_required`. Feedback en vivo: 201 en el caso válido y 422 con id inválido. |
+| ~00:25 | El rol "Azure AI User" no existe en el tenant; se llama **"Foundry User"**. Asignado para subir evaluaciones. |
+| ~00:35 | **Evaluación 5: 30/40 (75 %)**, **0 fugas**, seguridad 15/15, retrieval 4,82/5, groundedness 4,65/5, similarity 4,18/5, latencia p50 5,8 s y p95 11,5 s, **USD 0,055**. La corrida queda **registrada en Foundry → Evaluations**. Los promedios de las 4 métricas propias no se registran como agregados (el SDK pide un diccionario); los valores por fila sí. |
+| ~00:40 | Clon de publicación: historial limpio de ID de suscripción, tenant, sufijo de recursos y capturas con nombres; autor reescrito a la dirección *noreply* de GitHub. 0 coincidencias; árbol idéntico al de `feat/integration`. El push lo corre el usuario. |
+
+### Evolución de la evaluación
+
+| Corrida | Estado correcto | Fugas | Nota |
+|---|---|---|---|
+| 1 | — | — | Cortada por 429 del rate limit propio; top-k 8 rompía Prompt Shields |
+| 2 (línea base) | 24/40 (60 %) | 1 (falsa: traza de un fragmento descartado) | |
+| 3 | — | — | Invalidada por el tope diario de tokens |
+| 4 | 26/40 (65 %) | 0 | Tras TzInfo, fuentes disjuntas y prompts generales |
+| 5 | **30/40 (75 %)** | **0** | Tras feedback, concurrencia y perfil con nombres; subida a Foundry |
+
+Lo que sigue fallando (10/40): 2 de 3 contradicciones (el modelo concilia la ficha con la circular por fecha de vigencia; falta el criterio del usuario), 3 de 7 respuestas de procedimiento, 2 de 3 de perfil de cliente y 2 de 4 con permiso.
+
 ## 5. Lecciones
 
 - **Una afirmación se gana ejecutando.** La documentación de Azure decía que groundedness existía en Canada East y que la Free Trial tenía cuotas; solo la llamada real lo resolvió, en un sentido y en el otro.
