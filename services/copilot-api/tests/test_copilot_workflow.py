@@ -365,6 +365,54 @@ def claim_texts(answer) -> list[str]:
     return [claim.text for claim in answer.requirements + answer.steps]
 
 
+CONSUMER_LOAN = chunk("ficha-credito-consumo-0", "Crédito de consumo: tasa referencial 1,9% mensual, plazo entre 6 y 60 meses.")
+
+
+async def test_question_about_a_product_no_source_names_is_insufficient():
+    # Every claim cites real text, but about another product: no check on the claims can tell.
+    claim = DraftClaim(text="La tasa del depósito a plazo es 1,9% mensual", citation_ids=["S1"])
+    services = make_services(
+        llm=scripted(route("procedure", topics=["depósito a plazo"]), composed(claim)),
+        retriever=FakeRetriever([CONSUMER_LOAN]),
+    )
+
+    events = await run_turn(services, "¿Qué tasa paga el depósito a plazo a 90 días?")
+
+    answer = answer_of(events)
+    assert answer.status == "insufficient"
+    assert "depósito a plazo" in answer.message
+    (composer,) = [event.data for event in events if event.type == TRACE_EVENT_TYPE and event.data.node == "composer"]
+    assert composer.data["uncovered_topics"] == ["depósito a plazo"]
+
+
+async def test_every_word_of_a_topic_must_appear_in_one_source():
+    transfers = chunk("ficha-cuenta-corriente-0", "Transferencias a otros bancos: sin costo hasta $7.000.000 diarios.")
+    card = chunk("ficha-tarjeta-clasica-0", "Tarjeta de uso nacional e internacional.")
+    services = make_services(
+        llm=scripted(
+            route("procedure", topics=["transferencia internacional"]),
+            composed(DraftClaim(text="Las transferencias a otros bancos no tienen costo", citation_ids=["S1"])),
+        ),
+        retriever=FakeRetriever([transfers, card]),
+    )
+
+    answer = answer_of(await run_turn(services, "¿Cuánto cuesta una transferencia internacional?"))
+
+    assert answer.status == "insufficient"
+
+
+async def test_topics_named_in_the_sources_answer_despite_plural_and_accents():
+    output = ComposerOutput(message="Esto es lo que encontré.", requirements=COMPARISON[:4], steps=[])
+    services = make_services(
+        llm=scripted(route("procedure", topics=["tarjetas ORO", "Platinum"]), output),
+        retriever=FakeRetriever([ORO, PLATINUM]),
+    )
+
+    answer = answer_of(await run_turn(services, "¿Diferencia entre Oro y Platinum?"))
+
+    assert answer.status == "ok"
+
+
 async def test_fully_grounded_answer_keeps_every_claim_and_its_message():
     answer, verifier, _ = await compare()
 

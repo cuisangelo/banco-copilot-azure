@@ -19,6 +19,11 @@ Reglas:
 
 - `search_query`: reescribe la consulta como una pregunta autocontenida en español, usando el
   historial si la consulta actual responde una aclaración previa.
+- `topics`: cada producto, servicio o trámite concreto por el que pregunta la consulta, con las
+  palabras del asesor y sin el atributo que pide (tasa, requisitos, costo, plazo). "¿Cuánto cuesta la
+  chequera de la cuenta corriente?" da `["chequera", "cuenta corriente"]`; "¿en qué se diferencian la
+  cuenta sueldo y la vista?" da `["cuenta sueldo", "cuenta vista"]`. Lista vacía si la consulta solo
+  trata de los datos del cliente o no nombra un producto ni un trámite.
 - `customer_id`: el id de cliente mencionado en la consulta, tal como aparece; `null` si no hay.
 - `clarification_question`: solo para `missing_context`; una pregunta breve que pide exactamente los
   datos que faltan. Nunca pidas un dato que la consulta o el historial ya traen; si lo esencial está,
